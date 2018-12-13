@@ -1,0 +1,310 @@
+---
+title: "JDRF resample / cross-validation"
+author: "Dror Berel"
+date: "`r Sys.Date()`"
+output: 
+  rmarkdown::html_vignette:
+    keep_md: TRUE
+    toc: yes
+vignette: >
+  %\VignetteIndexEntry{JDRF resample / cross-validation}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr); select<-dplyr::select
+library(magrittr)
+library(purrr)
+library(stringr)
+library(tidyr)
+library(tibble)
+library(ggplot2)
+
+library(mlr)
+library(mlrCPO)
+
+library(glmnet)
+library(biobroom)
+library(limma)
+library(impute)
+
+library(JDRF_CAV)
+library(knitr)
+```
+
+## A. Setup
+# A1. Load raw data sets and scale
+```{r }
+MAE.cohort2.sam.mine # mlr's task format. currently non-functional, so require sep
+# pre-processing: Scaling 
+task_j<-MAE.cohort2.sam.mine %>>% cpoScale()
+
+
+F_mlr_task_add_median_target<-function(task){
+  # task = task_j
+  DF<-task %>% getTaskData
+  target<-task %>% getTaskTargetNames
+  DF$y_median<-DF %>% select(!!target) %>% ifelse(.>median(.), 'above','below')
+    
+  # back to task
+  if(task$type = cont)   task_out<-makeRegrTask(id = task$id, data = DF, target = target)
+  if(task$type = binary) task_out<-makeClassifTask(id = task$id, data = DF, target = target)
+
+}
+
+task_j %>% F_mlr_task_add_median_target()
+
+```
+
+
+# A2. mlr's learner setup
+```{r }
+lrn.glmnet.1.orig<-makeLearner(cl= "regr.cvglmnet", par.vals = list(alpha=1, s='lambda.min') ) # s will be override, so value does not matter. if not specified, mlr will assign s=0.01
+
+lrn_PreProcess_glmnet<-Fun_lrn_univ_Clusters_All_makePrep_MaG(lrn.glmnet.1.orig,
+                                                              train_F = F_PreProc_3_UnivClust_Train_MaG,
+                                                              Predict_F = F_PreProc13_BOTH_Predict_MaG,
+                                                              param.Univ.filt.top.n.features = NA, 
+                                                              param.UnivClustRankTopN        = NA, 
+                                                              param.cluster_method_KH        = NA, 
+                                                              param.corrplot.n.clusters.k    = NA, 
+                                                              param.corrplot.n.clusters.h    = NA, 
+                                                              parame.gene.or.module          = NA,
+                                                              param.LASSO.n.features.arbitrary=NA)
+Assay.Analyte.sep<-'.ZZZ.'
+is.numeric(param.impute.knn.k<-20) 
+param.assay.type.vec<-c('Short', 'Long', 'Short', 'Short', rep('Long', 11))
+lrn_PreProcess_glmnet$par.vals[['param.assay.type.vec']]<-param.assay.type.vec
+lrn_PreProcess_glmnet$next.learner$properties %<>% c(., 'missings') # ok to add only because 
+lrn_PreProcess_glmnet
+
+args_1<-list(
+  param.Univ.filt.top.n.features   = 30, 
+  param.UnivClustRankTopN          = 1, 
+  param.cluster_method_KH          = 'method.h', 
+  param.corrplot.n.clusters.k      = 10,  
+  param.corrplot.n.clusters.h      = 0.3, 
+  parame.gene.or.module            = 'gene', 
+  param.LASSO.n.features.arbitrary = 5)
+
+lrn_1<-Func_update_args_univ_clusters(lrn = lrn_PreProcess_glmnet, args_vec = args_1, lrn.id = 'lrn1')    
+
+```
+
+
+# B. proof of concept: single parameter value {h=0.3, top_n = 30}
+
+# B1. sinlge split (holdout)
+
+```{r holdout, eval = FALSE}
+
+## A. holdout: fold% train/test customized resample. always single run
+
+## A1: 100% customized
+Task_j_N<-task_j %>% getTaskSize
+Holdout_single_pair_AA<-makeFixedHoldoutInstance(train.inds = 1:Task_j_N, test.inds  = 1:Task_j_N, size = Task_j_N)
+Holdout_single_pair_AA$desc$predict = 'both'
+# Holdout_single_pair_AA$train.inds
+# Holdout_single_pair_AA$test.inds
+holdout_100_customized<-resample(lrn_1, task_j, resampling = Holdout_single_pair_AA, measures = list(rmse))#, extract = function(x) getLearnerModel(x))
+  
+holdout_100_customized$pred$data %>% filter(set == 'train') %>% arrange(id) %>% pull(response)# should be similar to result in 'single-run', but here s is not controlled manually as it was there!
+# default s value depends on the initial lrn: glmnet: s=0, cv.glmnet: s=min
+
+  
+## A2: portion
+  holdout_portion_single_run<-resample(lrn_1, task_j, resampling = makeResampleDesc("Holdout", split = 2/3, predict = 'both'), measures = list(rmse))#, extract = function(x) getLearnerModel(x))
+  
+  
+```
+
+
+
+# B2. (Multiple) resample / Cross-validation
+```{r eval = FALSE}
+R_cv<-resample(lrn_1, task_j, 
+               resampling = makeResampleDesc("Subsample", iter = 5, predict = 'both', split = 0.8),
+               #stratify.cols = 'y_median'), 
+               measures = list(rmse))
+
+## will have NAs because of NAs (no all-assay samples dropouts)
+R_cv %>% getRRPredictions
+R_cv$pred$data %>% filter(set == 'train') %>% arrange(id) %>% pull(response)
+R_cv$measures.test %>% mutate(x=1) %>% ggplot(aes(y = rmse, x= x)) + geom_boxplot() + geom_jitter(width = 0.2) + stat_summary(fun.y=mean, geom="point", shape=20, size=10, color="red", fill="red") + ggtitle('CV: RMSE')
+
+```
+
+
+
+# C. Benchmark + nested resampling
+
+## C1. brute force: loop (via map) around each combination
+
+### non-stratified
+```{r }
+## 0. setup
+param.LASSO.n.features.arbitrary<-6
+h_seq<-c(0.1, 0.2, 0.25, 0.3, 0.35, 0.4, 0.5, 0.75); top_h_sqe<-c(5, 10, 20, 30, 40, 50)
+
+bmr_tib<-expand.grid(hclust_cutree_h = h_seq, Univ_top_n = top_h_sqe) %>% as.matrix %>% as_data_frame
+
+bmr_tib %<>% 
+  mutate(args_vec_i = map2(Univ_top_n, hclust_cutree_h, ~list(.x, 1, 'method.h', 0,  .y, 'gene', param.LASSO.n.features.arbitrary)) ) %>% 
+  mutate(lrd_ID_i = paste0('lrn_', 1:n())) %>% 
+  mutate(lrn_i = map2(args_vec_i, lrd_ID_i, ~Func_update_args_univ_clusters(lrn = lrn_PreProcess_glmnet, args_vec = .x, lrn.id = .y)))
+
+
+lrn_featureless<-makeLearner(cl='regr.featureless')
+
+    # bmr_tib$rmse_h_n_mean %>% unlist %>% hist
+    ## featureless / intercept only
+    # y<-task_j %>% getTaskTargets # 100% train
+    # y_mean<-y %>% mean
+    # rmse_null<-sqrt(mean((y - y_mean) ^ 2))
+    
+    
+    # model_intercept_only<-train(lrn_featureless, task_j)
+    # model_intercept_only$learner.model
+    # pred_featureless<-predict(model_intercept_only, task_j)
+    # performance(pred_featureless, rmse)
+
+# bmr_tib %>% add_row(hclust_cutree_h=0, Univ_top_n=0, args_vec_i=list(), lrd_ID_i='Intercept', lrn_i = lrn_featureless, .before = TRUE)
+# bmr_tib %>% tail
+# bmr_tib %>% str
+
+
+# real<-resample(bmr_tib$lrn_i[[1]], task_j, resampling = makeResampleDesc("Subsample", iter = 2, predict = 'both', split = 0.8), measures = list(rmse), models = TRUE)
+# .x = real$models[[1]]
+# real$models %>% map(~.x$learner.model$next.model$learner.model %>% coef %>% tidy %>% nrow)
+
+
+Featureless_simulation<-resample(lrn_featureless, task_j, resampling = makeResampleDesc("Subsample", iter = 100, predict = 'both', split = 0.8), measures = list(rmse), models = TRUE)
+# Featureless$measures.test$rmse %>% hist
+
+##################################################################
+## non-stratified / balanced
+bmr_tib %<>% 
+  # slice(1:3) %>% 
+  mutate(Resample = lrn_i %>% map(~resample(.x, task_j, 
+               resampling = makeResampleDesc("Subsample", iter = 100, predict = 'both', split = 0.8),
+               measures = list(rmse), models = TRUE) ))
+# save(bmr_tib, file = 'bmr_tib_Bench_CV_non_stratified_model.rdata')
+# load( file = 'bmr_tib_Bench_CV_non_stratified_model.rdata') # bmr_tib
+
+##################################################################
+ bmr_tib$Resample[[1]]$
+
+
+## stratify plot by null models
+bmr_tib %<>% 
+  mutate(rmse_h_n_vec = Resample %>% map(~.x$model$learner.model$next.model$learner.model %>% coef %>% tidy %>% nrow))
+
+
+
+## extract AVG_rmse
+bmr_tib %<>% 
+  mutate(rmse_h_n_vec = Resample %>% map('measures.test') %>% map(~.x %>% pull(rmse)) ) %>% 
+  mutate(rmse_h_n_mean = rmse_h_n_vec %>% map_dbl(~.x %>% mean) )
+
+
+
+
+## diagnostics RMSE distributions > rmse_null
+bmr_tib %<>% 
+  #.x = bmr_tib$rmse_h_n_vec[[1]]
+  mutate(rmse_h_n_vec_vs_REF = rmse_h_n_vec %>% map(~(.x >rmse_null) %>% table) ) 
+ bmr_tib$rmse_h_n_vec_vs_REF
+
+ bmr_tib$rmse_h_n_vec %>% bind_cols %>% boxplot
+ abline(h=rmse_null, col='red')
+ 
+
+bmr_tib %>% 
+  select(Univ_top_n, hclust_cutree_h, rmse_h_n_mean) %>% 
+  # filter(hclust_cutree_h == param.corrplot.n.clusters.h) %>% 
+  ggplot() + 
+  geom_line(aes(x = Univ_top_n, y = rmse_h_n_mean, color = as.factor(1-hclust_cutree_h) %>% forcats::fct_rev() )) +   
+  #geom_hline(yintercept = rmse_null, colour = "red") + annotate("text", label = "Intercept only 100% train", x = 30, y = rmse_null, size = 3, colour = "red")+
+scale_y_continuous(breaks = pretty(c(bmr_tib$rmse_h_n_mean, rmse_null), n = 10)) +
+  theme_bw() + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
+  labs(title = 'Benchmarking + resampling: Average RMSE for different pre-processing feature selection criteria',
+       subtitle = 's=min, n=100, train/test = 80%, Univariate: top_n, Clustering: 1-h')
+
+```
+
+
+
+### Stratified
+```{r}
+
+
+bmr_tib %<>% 
+  #slice(1:3) %>% 
+  mutate(Resample = lrn_i %>% map(~resample(.x, task_j, 
+               resampling = makeResampleDesc("Subsample", iter = 100, predict = 'both', split = 0.8,
+               stratify.cols = 'y_median'), 
+               measures = list(rmse)) ))
+# bmr_tib$Resample[[1]] %>% getRRPredictions
+
+# save(bmr_tib, file = 'bmr_tib_Bench_CV.rdata')
+
+```
+
+
+## C2. mlr::benchmark(resamplings = Subsample)
+```{r }
+## B.2: automatic via mlr::benchmark(). However, no manual control for s.
+# benchmark's default require some additional nested resampling. here will force test to be the same 100% train
+
+
+## prediction by default is done here with the learner's original s
+bmr_CV<-benchmark(bmr_tib$lrn_i, task_j, resamplings = makeResampleDesc("Subsample", iter = 100, predict = 'both', split = 0.8), measures = list(rmse))
+
+
+```
+
+
+# ?. Session information
+```{r }
+sessionInfo()
+```
+
+
+
+
+```{r Not_used, eval = FALSE}
+## Bypass: create pre-imputed data
+
+## extract split ids
+# getResamplingIndices(R1)
+# table(R1$pred$data$set, R1$pred$data$id)
+# R1$pred$data %>% select(set, id) %>% group_by(set) %>% nest %>% select(data) %>% map(~.x %>% pull(id))
+extract_split_test_ids<-R1$pred$data %>% filter(set =='test') %>% pull(id)
+
+extract_vars_after_pre_process<-R1$extract[[1]]$features # before lasso, including covariates
+extract_glmnet_fit<-R1$extract[[1]]$learner.model
+#extract_vars_after_glmnet<-extract_glmnet_fit %>% tidy %>% pull(term) %>% unique %>% .[-1]
+# R1$extract[[1]]$features # features after pre-process(univ+clust), BEFORE glmnet
+test_DF_non_imputed<-task_j %>% 
+  # subsetTask(subset = extract_split_test_ids, features = extract_vars_after_pre_process) %>%
+  getTaskData(target.extra = TRUE) %>% .$data
+test_DF_non_imputed %>% is.na %>% table
+
+Target_Y<-task_j %>% getTaskTargetNames
+
+## impute
+# test_DF_non_imputed[4,1]
+test_DF_imputed<-impute::impute.knn(test_DF_non_imputed %>% as.matrix %>% t, k = param.impute.knn.k, colmax = 0.9999)$data %>% as.matrix %>% t # genes in the rows, samples in the columns
+# test_DF_imputed[4,1]
+test_DF_imputed %>% is.na %>% table
+# test_DF_imputed %>% str
+# test_DF_imputed %>% head
+# test_DF_imputed %>% colnames
+
+# all( (extract_glmnet_fit$beta %>% rownames) %in% (test_DF_non_imputed %>% names) )
+predict.glmnet(extract_glmnet_fit, newx = test_DF_non_imputed)
+R1$measures.test
+```
+

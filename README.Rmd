@@ -1,0 +1,44 @@
+---
+output: github_document
+---
+
+<!-- README.md is generated from README.Rmd. Please edit that file -->
+
+```{r, echo = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.path = "man/figures/"
+)
+```
+
+
+
+## Installation
+
+```{r, eval = FALSE}
+# Install development version from GitHub
+devtools::install_github("FredHutch/JDRFCAV")
+
+# TBA: Install release version from CRAN
+# install.packages("JDRFCAV")
+
+```
+
+
+## Usage
+[check vignettes:](https://github.com/FredHutch/JDRFCAV/tree/master/vignettes)   
+
+
+# Data curation 
+A. NCBI/GEO -> SEs -> MAE -> task (DataPackageR)
+
+# Paper's reproducible results
+B. Biomarker discovery:    
+  B.1 Feature selection: Fun_lrn_univ_only_makePrep_MaG, Fun_lrn_univ_Clusters_All_makePrep_MaG   
+  B.2 Sensitivity analysis    
+
+# Customized Multi-assay feature selection
+C. (TBA) UnivCPO, UnivClustCPO (refactoring the above makePreprocWrapper() )
+
+

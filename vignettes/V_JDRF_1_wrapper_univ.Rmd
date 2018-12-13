@@ -1,0 +1,276 @@
+---
+title: "JDRF Single run"
+author: "Dror Berel"
+date: "`r Sys.Date()`"
+output: 
+  rmarkdown::html_vignette:
+    keep_md: TRUE
+    toc: yes
+vignette: >
+  %\VignetteIndexEntry{JDRF Single run}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(dplyr); select<-dplyr::select
+library(magrittr)
+library(purrr)
+library(stringr)
+library(tidyr)
+library(tibble)
+library(ggplot2)
+
+library(mlr)
+library(mlrCPO)
+
+library(glmnet)
+library(biobroom)
+library(limma)
+#install_version("ggplot2", version = "0.9.1", repos = "http://cran.us.r-project.org")
+library(impute)
+
+library(JDRF_CAV)
+
+
+```
+
+# 1. Load raw data sets
+```{r load}
+MAE.cohort2.sam.mine # mlr's task format. currently non-functional, so require sep
+JDRF_modules_sets_tibble # modules lists 
+#(TO DO: reformat into Bioc::GSEABase GeneSetCollection format)
+
+modules_sets_combined_l<-Fun_Load_module_sets(JDRF_modules_sets_tibble) ## gene <-> module/pathway/set annotations
+```
+
+
+
+# 2. mlr's learner setup
+```{r lrn}
+lrn.glmnet.1.orig<-makeLearner(cl= "regr.cvglmnet", par.vals = list(alpha=1, s='lambda.min') ) # s will be override, so value does not matter. if not specified, mlr will assign s=0.01
+# lrn.glmnet.1.orig$par.vals
+# lrn.glmnet.1.orig$par.set
+
+lrn_PreProcess_glmnet<-Fun_lrn_univ_Clusters_All_makePrep_MaG(lrn.glmnet.1.orig,
+  train_F                        = F_PreProc_3_UnivClust_Train_MaG, # pre-definced wrapper-function: train
+  Predict_F                      = F_PreProc13_BOTH_Predict_MaG,  # pre-definced wrapper-function: predict
+  param.Univ.filt.top.n.features = NA, 
+  param.UnivClustRankTopN        = NA, 
+  param.cluster_method_KH        = NA, 
+  param.corrplot.n.clusters.k    = NA, 
+  param.corrplot.n.clusters.h    = NA, 
+  parame.gene.or.module          = NA,
+  param.LASSO.n.features.arbitrary=NA)
+
+## params currently NOT in learner, since they are not tuned/benchmarked
+Assay.Analyte.sep<-'.ZZZ.'
+is.numeric(param.impute.knn.k<-20) 
+param.assay.type.vec<-c('Short', 'Long', 'Short', 'Short', rep('Long', 11)) # to be automatically generated from MAE/SE_i@metadata
+lrn_PreProcess_glmnet$par.vals[['param.assay.type.vec']]<-param.assay.type.vec
+
+lrn_PreProcess_glmnet$next.learner$properties %<>% c(., 'missings') # ok to add only because pre-rprocessing will make sure all NAs are imputed
+
+## arguments for the pre-processing wrapper
+args_1<-list(
+  param.Univ.filt.top.n.features   = 30, 
+  param.UnivClustRankTopN          = 1, 
+  param.cluster_method_KH          = 'method.h', 
+  param.corrplot.n.clusters.k      = 10,  
+  param.corrplot.n.clusters.h      = 0.3, 
+  parame.gene.or.module            = 'gene', 
+  param.LASSO.n.features.arbitrary = 5)
+
+lrn_1<-Func_update_args_univ_clusters(lrn = lrn_PreProcess_glmnet, args_vec = args_1, lrn.id = 'lrn1')        # glmnet. NOT CV-glmnet!
+# lrn_1$par.vals
+```
+
+
+# 3. pre-processing
+
+## 3.1 Scaling 
+```{r scaling}
+task_j<-MAE.cohort2.sam.mine %>>% cpoScale()
+```
+
+
+## 3.2 Baked task and $control 
+Extracting the trained data set (after pre-processing), and other tuning parameters (alt_lambda).   
+if module-level data analysis is done, this will include the collapsed training dataset at the module level.    
+
+```{r baked}
+data_to_bake  <-task_j %>% getTaskData()
+target_to_bake<-task_j %>% getTaskTargetNames()
+
+## bake UnivClust:
+baked_UnivClust<-F_PreProc_3_UnivClust_Train_MaG(data_to_bake, target_to_bake, args = lrn_1$par.vals) # ok to do with F_PreProc_3_UnivClust_Train_MaG() since no further ML is done
+task_baked_UnivClust<-makeRegrTask(id = "baked_passed_univ", data = baked_UnivClust$data, target = "cpep_model_decayrate")
+
+## 201 features have remained
+task_baked_UnivClust
+# baked_UnivClust$control$glmnet_sanity %>% tidy %>% head
+# baked_UnivClust$control$alt_lambda 
+
+# Alternatively, this will also be passed via train() returned model()$learner.model$control$
+
+```
+
+
+
+
+
+# 4. multivariate model 
+
+## 4.1 Direct from ML (glmnet), using baked (skipping train)
+```{r ML_from_baked}
+Baked_x<-baked_UnivClust$data %>% select(-cpep_model_decayrate) %>% as.matrix
+Baked_y<-baked_UnivClust$data %>% pull(cpep_model_decayrate)
+# predict(model_3_glmnet, Baked_x, s=Model_UnivClust$learner.model$control$alt_lambda) %>% data.frame %>% pull(X1)
+fit_baked<-cv.glmnet(Baked_x, Baked_y, alpha = 1)
+# fit_baked %>% tidy
+# plot(fit_baked)
+# coef(fit_baked) include range of lambda values
+
+coef(fit_baked, s = 0.00009) %>% tidy # 19 withOUT OSBP2. paper
+
+response_direct_glmnet_baked<-predict(fit_baked, Baked_x, s = fit_baked$lambda.min) %>% data.frame %>% pull(X1)
+## with 100% train, self-predict, OK to use Baked_x since we know for sure it will include final LASSO coel that were selected from it. However, this will NOT be the case for resampling/CV
+```
+
+
+
+## 4.2 using train()'s returned model
+Original task had missing values. therefore, when re-used for predict, causing missing predictions.
+Alternatively, use 'baked' imputed task from pre-processing (exactly as was done earlier)
+
+```{r ML_from_train}
+# set.seed(1)
+Model_UnivClust<-train(lrn_1, task_j) ## lrn will have defaults s, that is used to extract/predict specific coef, though all s values are used for calculation
+# Model_UnivClust$learner$next.learner$par.vals$s # default s is unchanged, unless updated directly as below
+train_glmnet_fit<-Model_UnivClust$learner.model$next.model$learner.model
+# coef(train_glmnet_fit) %>% tidy # If s is not specified, will always use lambda.1se. this is NOT affected by the learner's par.vals
+# coef(train_glmnet_fit, s = train_glmnet_fit$lambda.1se) %>% tidy
+coef_table<-coef(train_glmnet_fit, s = train_glmnet_fit$lambda.min) %>% tidy #  s = 0.00009
+coef_table
+
+# Predict:
+# mlr::predict take by default the initial s, so must be updated internally from model()$control
+Model_UnivClust$learner$next.learner$par.vals$s # this is the intial s, arbitrarily defined in the original glmnet learner
+# Model_UnivClust_my_s<-Model_UnivClust # make a copy, not to over-ride
+# Model_UnivClust_my_s$learner$next.learner$par.vals$s<-0.00009
+# Model_UnivClust_my_s$learner.model$control$alt_lambda$lambda.min
+
+mlr_predict<-predict(Model_UnivClust, task_baked_UnivClust) # unlike the above coef(), the mlr::predict will be affected by the learner's par.vals. here, it will take the lambda.min, rather than the default lambda.1se
+
+response_direct_glmnet_train<-mlr_predict$data$response
+
+```
+
+
+
+
+# 5. Performance
+```{r Performance}
+all(response_direct_glmnet_train == response_direct_glmnet_baked) # sanity check
+rmse_direct<-sqrt(mean((response_direct_glmnet_train - Baked_y) ^ 2)) # identical, so doesn't matter which one to use
+rmse_direct
+
+
+## featureless / intercept only
+y<-task_j %>% getTaskTargets
+y_mean<-y %>% mean
+rmse_null<-sqrt(mean((y - y_mean) ^ 2))
+
+# model_intercept_only<-train(makeLearner(cl='regr.featureless'), task_j)
+# model_intercept_only$learner.model
+# pred_featureless<-predict(model_intercept_only, task_baked_UnivClust)
+# performance(pred_featureless, rmse)
+
+
+
+```
+
+
+# 6. Model diagnostics
+```{r Model_diagnostics}
+## C-peptide: Truth vs Fitted:
+# plot(x = response_direct_glmnet_train, y = Baked_y)
+DF_fitted_trutch<-data.frame(Fitted = response_direct_glmnet_train, Truth = Baked_y)
+ggplot(DF_fitted_trutch, aes(x = Fitted, y = Truth)) + geom_point() + geom_smooth(method = 'lm') + 
+  labs(title = 'C-peptide: Truth vs Fitted', subtitle = 'train data only')
+
+
+## Each analyte vs original y
+task_coef_glmnet<-task_baked_UnivClust %>% subsetTask(features = coef_table$row[-1])# imputed
+DF_wide<-task_coef_glmnet %>% getTaskData()
+DF_long<-DF_wide %>% gather('Analyte', 'value', -cpep_model_decayrate)
+# DF_long %>% head
+
+ggplot(DF_long, aes(x=value, y=cpep_model_decayrate)) + 
+  geom_point() + facet_wrap(~Analyte) + 
+  #geom_smooth(method = 'lm') +
+  xlab('Scaled analyte value') + ylab('C-peptide') + 
+  labs(title = 'Figure 3: C-peptide vs each of the selected analytes')
+      
+
+
+
+
+```
+
+
+
+# 7. Benchmarking / sensitivity to LASSO lmbda (s) { fixed h=0.3, top_n=30}
+```{r warning = FALSE, fig.height = 8, fig.width = 8}
+## We choose to more carefully select (tune) the optimal value for lambda, so predicion has to be manually, rather than straight forward using mlr::predict() function
+
+# Model_UnivClust$learner.model$control$alt_lambda
+
+# alt_lambda is by default cv.glmnet$lambda.min, or, if the above caused null model, a revised, "pushed" lambda
+
+fit_baked_cv<-cv.glmnet(Baked_x, Baked_y, alpha = 1, nfolds = Baked_x %>% nrow)
+# fit_baked_cv$lambda.min
+# fit_baked_cv$lambda.1se
+
+bmr_s_tib_cv<-data.frame(param = c(1:20)) %>% as_data_frame %>% 
+  mutate(s = param %>% map(~cvglmnet_alternative_lambda.min_function(fit_baked_cv, .x) ) %>% map('pushed_lambda') %>% unlist)
+
+bmr_s_tib_ind<-baked_UnivClust$control$alt_lambda %>% data.frame %>% t %>% data.frame %>%
+  rownames_to_column %>% set_colnames(c('param', 's')) %>% as_data_frame() %>% 
+  add_row(param = 'Sam', s = 0.00009)
+
+bmr_s_tib<-rbind(bmr_s_tib_ind, bmr_s_tib_cv)
+
+bmr_s_tib %<>% 
+  mutate(coef_s    = s %>% map(~coef(fit_baked, s = .x) %>% tidy)) %>% 
+  mutate(n_coef    = coef_s %>% map_int(~nrow(.x))) %>% 
+  mutate(predict_s = s %>% map(~predict(fit_baked, Baked_x, s = .x) %>% data.frame %>% pull(X1) )) %>% 
+  mutate(rmse_s    = predict_s %>% map_dbl(~sqrt(mean((.x - Baked_y) ^ 2))))
+
+# coef(fit_baked, s = baked_UnivClust$control$alt_lambda$lambda.min) %>% tidy # 0.0001001846 # 20 with OSBP2
+# coef(fit_baked, s = baked_UnivClust$control$alt_lambda$lambda.1se) %>% tidy # 16
+# coef(fit_baked, s = baked_UnivClust$control$alt_lambda$pushed_lambda) %>% tidy # 
+
+
+ggplot(bmr_s_tib, aes(x = s, y = rmse_s, label  = param)) + 
+  geom_point() + 
+  geom_text(hjust=0.1, vjust=0) + 
+  ggtitle('Sensitivity to cv.glmnet s: top_n = 30, h=0.3') + 
+  geom_hline(yintercept = rmse_null, colour = "red") + 
+  scale_y_continuous(breaks = pretty(bmr_s_tib$rmse_s, n = 10)) +
+  annotate("text", label = "Intercept only", x = 0.0001, y = rmse_null, size = 5, colour = "red")
+
+
+```
+
+
+
+
+
+
+# 7. Session information
+```{r }
+sessionInfo()
+```
