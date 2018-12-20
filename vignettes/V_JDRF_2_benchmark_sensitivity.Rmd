@@ -21,6 +21,7 @@ library(stringr)
 library(tidyr)
 library(tibble)
 library(ggplot2)
+library(cowplot)
 
 library(mlr)
 library(mlrCPO)
@@ -30,8 +31,9 @@ library(biobroom)
 library(limma)
 library(impute)
 
-library(JDRF_CAV)
+library(JDRFCAV)
 library(knitr)
+
 ```
 
 ## A. Setup
@@ -87,14 +89,14 @@ param.LASSO.n.features.arbitrary<-6
 ## Primary(Univ + cluster_rank=1)
 ## Secondary(univariate only, without clustering).
 
-#h_seq<-seq(0.25, 0.9, by=0.25);                      top_h_sqe<-seq(10,   50,  by = 40)
-h_seq<-c(0.1, 0.2, 0.25, 0.3, 0.35, 0.4, 0.5, 0.75); top_h_sqe<-c(5, 10, 20, 30, 40, 50)
+h_seq<-seq.int(2, 10, by=1)/10; top_h_sqe<-seq.int(10,   60,  by = 10)
+# h_seq<-c(0.1, 0.2, 0.25, 0.3, 0.35, 0.4, 0.5, 0.75); top_h_sqe<-c(5, 10, 20, 30, 40, 50)
+# cs <- seq(0,0.75, 0.05); Ns <- seq(5, 60, 5)
 
 bmr_tib<-expand.grid(
   hclust_cutree_h = h_seq, 
   Univ_top_n      = top_h_sqe) %>% as_data_frame
 # bmr_tib %<>% add_row(hclust_cutree_h = 0.3, Univ_top_n = 30, .before = 1)
-
 
 
 ## 0. setup
@@ -103,7 +105,7 @@ bmr_tib  %<>%
   mutate(lrd_ID_i = paste0('lrn_', 1:n())) %>% 
   mutate(lrn_i = map2(args_vec_i, lrd_ID_i, ~Func_update_args_univ_clusters(lrn = lrn_PreProcess_glmnet, args_vec = .x, lrn.id = .y)))
 
-bmr_tib
+
 ```
 
 
@@ -113,25 +115,14 @@ bmr_tib
 ```{r warning = FALSE}
 #############################################################################
 # bmr_tib_naive<-bmr_tib %>% mutate(whole_run = lrn_i %>% imap(~whole_run_function(task = task_j, lrn = .x, lambda_opt = 'pushed_lambda', .y)))
-# save(bmr_tib_naive, file = 'bmr_tib_Bench_only.rdata')
+# save(bmr_tib_naive, file = 'data/bmr_tib_naive.rdata')
 #############################################################################
-load(file = 'C:/Users/dberel/Desktop/Bioc2mlr/bmr_tib_Bench_only.rdata') # bmr_tib_naive
+# load(file = 'C:/Users/dberel/Desktop/Bioc2mlr/bmr_tib_naive.rdata') # 
+bmr_tib_naive
 
 ```
 
-## B.2: automatic via mlr::benchmark(). However, no manual control for s.
-```{r, eval = FALSE}
-# benchmark's default require some additional nested resampling. here will force test to be the same 100% train
 
-## test = 100% train
-Task_j_N<-task_j %>% getTaskSize
-Holdout_single_pair_AA<-makeFixedHoldoutInstance(train.inds = 1:Task_j_N, test.inds  = 1:Task_j_N, size = Task_j_N)
-Holdout_single_pair_AA$desc$predict = 'both'
-
-## prediction by default is done here with the learner's original s
-bmr<-benchmark(bmr_tib$lrn_i, task_j, resamplings = Holdout_single_pair_AA, measures = list(rmse))
-
-```
 
 
 
@@ -177,33 +168,29 @@ DF_rmse<-bmr_tib_naive_res %>%
 # select(hclust_cutree_h, Univ_top_n, rmse_s_min, rmse_s_1se, rmse_s_pushed) %>% gather('s_opt','rmse',3)
   gather('s_opt','rmse', 3)
 
-stats_disp_df<-read.csv('Z:/R_rhino/JDRF_paper/data/RMSE_benchmarking.csv') # Sam's past results
-
-DF_both2<-rbind(DF_rmse, data.frame(stats_disp_df %>% select(hclust_cutree_h = corrplot.n.clusters, Univ_top_n = feature.n, rmse = RMSE_mean), s_opt = 'Sam'))
 
 ## featureless / intercept only
 y<-task_j %>% getTaskTargets
 y_mean<-y %>% mean
 rmse_null<-sqrt(mean((y - y_mean) ^ 2))
 
-DF_both2 %>% 
+DF_rmse %>% filter(hclust_cutree_h == param.corrplot.n.clusters.h, Univ_top_n == param.Univ.filt.top.n.features) 
   # filter(s_opt %in% c('rmse_s_1se','rmse_s_pushed')) %>% 
   # filter(hclust_cutree_h %in% c(0.75)) %>% 
-  filter(hclust_cutree_h == param.corrplot.n.clusters.h, Univ_top_n == param.Univ.filt.top.n.features) 
 
 
 
 
-DF_both2 %>% 
+DF_rmse %>% 
   # filter(hclust_cutree_h == param.corrplot.n.clusters.h) %>% 
   ggplot() + 
   geom_line(aes(x = Univ_top_n, y = rmse, color = as.factor(1-hclust_cutree_h) %>% forcats::fct_rev() )) +   geom_hline(yintercept = rmse_null, colour = "red") + 
 facet_grid(.~s_opt) + 
     annotate("text", label = "Intercept only", x = 30, y = rmse_null, size = 3, colour = "red")+
-scale_y_continuous(breaks = pretty(DF_both2$rmse, n = 10)) +
+scale_y_continuous(breaks = pretty(c(rmse_null, DF_rmse$rmse), n = 10)) +
   theme_bw() + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
   labs(title = 'Sensitivity analysis: RMSE for different pre-processing feature selection criteria',
-       subtitle = 'Univariate: top_n, Clustering: 1-h')
+       subtitle = 'Univariate: top_n, Clustering: 1-h, Single iteration of 100% train/test')
 
 ```
 
@@ -274,31 +261,56 @@ GS_comb_primary_tib %<>%
     ## Secondary
       mutate(secondary_overlap_lgl_vec = secondary_analytes %>% map_lgl(function(secondary_comb_i) .x %in% secondary_comb_i) %>% setNames(bmr_all_comb %>% unite('h_topN', c('hclust_cutree_h','Univ_top_n')) %>% pull(h_topN) )) %>% 
    
-    
-    ## Primary + Secondary (primary over secondary)
-      mutate(PriSec__overlap_lgl_vec = map2_lgl(primary_overlap_lgl_vec, secondary_overlap_lgl_vec, any))
-    
+    ## Primary + Secondary (primary over secondary via any() )
+      mutate(PriSec_overlap_lgl_vec = map2_chr(primary_overlap_lgl_vec, secondary_overlap_lgl_vec, 
+          ~ifelse(.y, ifelse(.x, 'In model, primary analyte', 'In model, secondary analyte'),'Not in model' ))) # end internal DF matrix for all {h,top_n} combinations
+
  }))
-GS_comb_primary_tib$bmr_all_comb_overlap_matrix_YN[[1]] %>% 
-  select(primary_overlap_lgl_vec, secondary_overlap_lgl_vec, PriSec__overlap_lgl_vec)
+
+## Nested tibble with TRUE/FALSE values for (vector) overlap
+# GS_comb_primary_tib$bmr_all_comb_overlap_matrix_YN[[1]] %>% select(primary_overlap_lgl_vec, secondary_overlap_lgl_vec, PriSec_overlap_lgl_vec) %>% data.frame
 
 # GS_comb_primary_tib %<>% mutate(overlap_matrix_YN = bmr_all_comb_overlap_matrix_YN %>% map(~.x$primary_overlap_lgl_vec %>% matrix(bmr_all_comb_dim) %>% data.frame %>% set_rownames(bmr_all_comb$hclust_cutree_h %>% unique) %>% set_colnames(bmr_all_comb$Univ_top_n %>% unique))) # GS_comb_primary_tib$overlap_matrix_YN[[1]]
+
+## Rename analytes 
+# !!! FOR VISUALIZATION ONLY. NOT RELEVANT IF OTHER ANALYTES ARE SELECTED, OR IN DIFFERENT ORDER !!!
+GS_comb_primary_tib$Primary_analyte %<>% str_replace('.ZZZ.',' ')
+GS_comb_primary_tib$Primary_analyte[2:5]<-paste('Affy', c('GPR75','EIF4G2','SORBS2','SVEP1'), sep=' ')
+
+# library(RColorBrewer)
+myColors <- c("#DDDDDD", "#56B4E9", "#0072B2")
+names(myColors) <- c("Not in model", "In model, secondary analyte", "In model, primary analyte")
 
 
 GS_comb_primary_tib %<>% 
   mutate(overlap_matrix_ggplot = map2(bmr_all_comb_overlap_matrix_YN, Primary_analyte, ~
-    # .x = GS_comb_primary_tib$bmr_all_comb_overlap_matrix_YN[[1]]
+    # .x = GS_comb_primary_tib$bmr_all_comb_overlap_matrix_YN[[1]]; .y = GS_comb_primary_tib$Primary_analyte[[1]]
+    # DF<-.x %>% select(hclust_cutree_h, Univ_top_n, PriSec_overlap_lgl_vec)
+      #DF$hclust_cutree_h %>% table; DF$Univ_top_n %>% table
     .x %>% 
-      #select(hclust_cutree_h, Univ_top_n, PriSec__overlap_lgl_vec) %>% 
- ggplot() + geom_tile(aes(x = Univ_top_n, y = hclust_cutree_h, fill = PriSec__overlap_lgl_vec)) +
-    labs(x = "Analytes per assay", y = "Min correlation in cluster", title = .y) +
-         #fill  = "Analyte presence in models") +
-    #scale_fill_manual(name = "`Analyte In Model`", values = myColors) +
-    scale_y_reverse() +
-    theme(legend.position = "none", text = element_text(size=12), plot.title = element_text(size = 12))
+      #select(hclust_cutree_h, Univ_top_n, PriSec_overlap_lgl_vec) %>% 
+      ggplot() + geom_tile(aes(x = Univ_top_n, y = hclust_cutree_h, fill = PriSec_overlap_lgl_vec)) +
+        scale_fill_manual(values = myColors) +
+        labs(x = "Analytes per assay", y = "Min correlation in cluster", title = .y) +
+        scale_y_reverse() +
+        theme(legend.position = "none", text = element_text(size=12), plot.title = element_text(size = 12)) + 
+        theme_bw(base_size = 10) + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+ 
   ))
-
 # GS_comb_primary_tib$overlap_matrix_ggplot[[1]]
+
+
+
+Exclude_analytes<-c(6, 8, 11, 16, 17)
+GS_comb_primary_tib_ordered<-GS_comb_primary_tib[c(c(1:18)[-Exclude_analytes], Exclude_analytes),]    
+    
+common_legend <- get_legend(GS_comb_primary_tib_ordered$overlap_matrix_ggplot[[1]] + theme(legend.position = "bottom"))
+
+pg <- plot_grid(plotlist = GS_comb_primary_tib_ordered$overlap_matrix_ggplot %>% map(~.x + theme(legend.position='none')))
+
+plot_grid(pg, common_legend, ncol = 1, rel_heights = c(1,.1))
+pg
+
 
 ```
 
@@ -332,4 +344,18 @@ bmr_tib_naive_res<-bmr_tib_naive %>%
 
 
 
+
+## B.2: automatic via mlr::benchmark(). However, no manual control for s.
+```{r, eval = FALSE}
+# benchmark's default require some additional nested resampling. here will force test to be the same 100% train
+
+## test = 100% train
+Task_j_N<-task_j %>% getTaskSize
+Holdout_single_pair_AA<-makeFixedHoldoutInstance(train.inds = 1:Task_j_N, test.inds  = 1:Task_j_N, size = Task_j_N)
+Holdout_single_pair_AA$desc$predict = 'both'
+
+## prediction by default is done here with the learner's original s
+bmr<-benchmark(bmr_tib$lrn_i, task_j, resamplings = Holdout_single_pair_AA, measures = list(rmse))
+
+```
 
