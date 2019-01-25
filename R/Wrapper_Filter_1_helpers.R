@@ -558,7 +558,7 @@ Func_Collapse_Data_by_module_names<-function(DF_gene, Train_feature_names){  # m
 #' @rdname Wrapper_Filter_1_helpers
 
 #' @details when cv.glmnet lambda.min return a null model (intercept only), alternatively return 'previous'
-#' value of lambda that reults \code {param.LASSO.n.features.arbitrary} features
+#' value of lambda that reults param.LASSO.n.features.arbitrary features
 #'
 # Alternative nearest lambda
 # https://github.com/mlr-org/mlr/issues/1030

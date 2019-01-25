@@ -14,6 +14,7 @@ vignette: >
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+
 library(dplyr); select<-dplyr::select
 library(magrittr)
 library(purrr)
@@ -36,12 +37,18 @@ library(knitr)
 
 ```
 
+
+Benchmarking on pre-processing parameters:   
+1. Univariate cuttof at each assay (top_n)  
+2. clustering minimum correlation (h)  
+
+
 ## A. Setup
 # 1. Load raw data sets and scale
 ```{r }
-MAE.cohort2.sam.mine # mlr's task format. currently non-functional, so require sep
+data_task # mlr's task format. currently non-functional, so require sep
 # pre-processing: Scaling 
-task_j<-MAE.cohort2.sam.mine %>>% cpoScale()
+task_j<-data_task %>>% cpoScale()
 ```
 
 
@@ -89,13 +96,15 @@ param.LASSO.n.features.arbitrary<-6
 ## Primary(Univ + cluster_rank=1)
 ## Secondary(univariate only, without clustering).
 
-h_seq<-seq.int(2, 10, by=1)/10; top_h_sqe<-seq.int(10,   60,  by = 10)
+h_seq<-c(seq.int(0, 20, by=1)/20)[-c(17:21)]; top_h_sqe<-seq.int(10,   60,  by = 5)
 # h_seq<-c(0.1, 0.2, 0.25, 0.3, 0.35, 0.4, 0.5, 0.75); top_h_sqe<-c(5, 10, 20, 30, 40, 50)
 # cs <- seq(0,0.75, 0.05); Ns <- seq(5, 60, 5)
+# 1-h_seq
+
 
 bmr_tib<-expand.grid(
   hclust_cutree_h = h_seq, 
-  Univ_top_n      = top_h_sqe) %>% as_data_frame
+  Univ_top_n      = top_h_sqe) %>% as_tibble
 # bmr_tib %<>% add_row(hclust_cutree_h = 0.3, Univ_top_n = 30, .before = 1)
 
 
@@ -111,13 +120,13 @@ bmr_tib  %<>%
 
 # B. Run:
 
-## B.1: naive, nanual loop (via appply-like / map), broken to pre-processed/baked -> s.control (cv.glmnet min) -> ML
+## B.1: naive, manual loop (via appply-like / map), broken to pre-processed/baked -> s.control (cv.glmnet min) -> ML
 ```{r warning = FALSE}
 #############################################################################
 # bmr_tib_naive<-bmr_tib %>% mutate(whole_run = lrn_i %>% imap(~whole_run_function(task = task_j, lrn = .x, lambda_opt = 'pushed_lambda', .y)))
 # save(bmr_tib_naive, file = 'data/bmr_tib_naive.rdata')
 #############################################################################
-# load(file = 'C:/Users/dberel/Desktop/Bioc2mlr/bmr_tib_naive.rdata') # 
+# load(file = 'Z:/R_rhino/JDRFCAV/data/bmr_tib_naive.rdata') # 
 bmr_tib_naive
 
 ```
@@ -233,83 +242,105 @@ bmr_tib_naive_res$coef_s_min %>% setNames(str_c('h=', bmr_tib_naive_res$hclust_c
 
 
 ## Plot 3: Benchmark analytes comparison: overlap between each {top_n, h}i vs Gold-Standard {top_n = 30, h = 0.3}
-```{r }
+```{r Plot_heatmaps, fig.height = 12, fig.width = 12 }
 bmr_all_comb<-bmr_tib_naive_res %>% 
   select(hclust_cutree_h, Univ_top_n, coef_s_min, UnivOnlyCoef) %>% 
   rename(secondary_analytes = UnivOnlyCoef) %>% 
   mutate(primary_analytes   = coef_s_min %>% map(~.x$row[-1])) %>% 
   mutate(check_overlap      = map2_lgl(primary_analytes, secondary_analytes, ~all(.x %in% .y))) ## Note!: primary may include covariates, which secondary (univ only) will NOT! check if affect results!!
 # bmr_all_comb$primary_analytes[[1]] %in% bmr_all_comb$secondary_analytes[[1]]
-
-bmr_all_comb_dim<-bmr_all_comb %>% select(hclust_cutree_h, Univ_top_n) %>% table %>% dim
+# bmr_all_comb_dim<-bmr_all_comb %>% select(hclust_cutree_h, Univ_top_n) %>% table %>% dim
 
 GS_comb<-bmr_all_comb %>%   
   filter(hclust_cutree_h == param.corrplot.n.clusters.h, Univ_top_n == param.Univ.filt.top.n.features) %>%   select(secondary_analytes, primary_analytes) %>% map(unlist)
 
 
 # REF: bmr_all_comb
-GS_comb_primary_tib<-data.frame(Primary_analyte = GS_comb$primary_analytes, stringsAsFactors = FALSE) %>% as_data_frame
+GS_comb_primary_tib<-data.frame(GS_Primary_analyte = GS_comb$primary_analytes, stringsAsFactors = FALSE) %>% as_data_frame
+
 GS_comb_primary_tib %<>% 
-  mutate(bmr_all_comb_overlap_matrix_YN = Primary_analyte %>% map(~{
-    # .x = GS_comb_primary_tib$Primary_analyte[[1]]
+  mutate(bmr_all_comb_overlap_matrix_YN = GS_Primary_analyte %>% map(~{
+    # .x = GS_comb_primary_tib$GS_Primary_analyte[[2]]
     # .x %in% bmr_all_comb$primary_analytes[[40]]
   
     bmr_all_comb %<>% 
     ## Primary
-      mutate(primary_overlap_lgl_vec = primary_analytes %>% map_lgl(function(primary_comb_i) .x %in% primary_comb_i) %>% setNames(bmr_all_comb %>% unite('h_topN', c('hclust_cutree_h','Univ_top_n')) %>% pull(h_topN) )) %>% 
+     # .x %in% bmr_all_comb$secondary_analytes[[3]] %>% head
+     # sec_list<-bmr_all_comb %>% pull(secondary_analytes)
+     # sec_list %>% map(function(sec) .x %in% sec) %>% unlist
+
+      mutate(primary_overlap_lgl_vec = primary_analytes %>% 
+               map_lgl(function(primary_comb_i) .x %in% primary_comb_i) %>% 
+               setNames(bmr_all_comb %>% unite('h_topN', c('hclust_cutree_h','Univ_top_n')) %>% 
+                          pull(h_topN) )) %>% 
     
     ## Secondary
-      mutate(secondary_overlap_lgl_vec = secondary_analytes %>% map_lgl(function(secondary_comb_i) .x %in% secondary_comb_i) %>% setNames(bmr_all_comb %>% unite('h_topN', c('hclust_cutree_h','Univ_top_n')) %>% pull(h_topN) )) %>% 
+      mutate(secondary_overlap_lgl_vec = secondary_analytes %>% 
+               map_lgl(function(secondary_comb_i) .x %in% secondary_comb_i) %>% 
+               setNames(bmr_all_comb %>% unite('h_topN', c('hclust_cutree_h', 'Univ_top_n')) %>% 
+                          pull(h_topN) )) %>% 
    
     ## Primary + Secondary (primary over secondary via any() )
       mutate(PriSec_overlap_lgl_vec = map2_chr(primary_overlap_lgl_vec, secondary_overlap_lgl_vec, 
-          ~ifelse(.y, ifelse(.x, 'In model, primary analyte', 'In model, secondary analyte'),'Not in model' ))) # end internal DF matrix for all {h,top_n} combinations
-
+          ~ifelse(.y, ifelse(.x, 'In model, primary analyte', 'In model, secondary analyte'), 
+                  'Not in model' ))) 
+    # end internal DF matrix for all {h,top_n} combinations
  }))
 
+# bmr_all_comb$primary_overlap_lgl_vec %>% table
 ## Nested tibble with TRUE/FALSE values for (vector) overlap
 # GS_comb_primary_tib$bmr_all_comb_overlap_matrix_YN[[1]] %>% select(primary_overlap_lgl_vec, secondary_overlap_lgl_vec, PriSec_overlap_lgl_vec) %>% data.frame
 
 # GS_comb_primary_tib %<>% mutate(overlap_matrix_YN = bmr_all_comb_overlap_matrix_YN %>% map(~.x$primary_overlap_lgl_vec %>% matrix(bmr_all_comb_dim) %>% data.frame %>% set_rownames(bmr_all_comb$hclust_cutree_h %>% unique) %>% set_colnames(bmr_all_comb$Univ_top_n %>% unique))) # GS_comb_primary_tib$overlap_matrix_YN[[1]]
 
+## coariates were forced to be at all models be definition. they are not part of the pre-processing, therefore added be force
+GS_comb_primary_tib[GS_comb_primary_tib$GS_Primary_analyte=='Covariate_cpep_auc2hr_log_baseline','bmr_all_comb_overlap_matrix_YN'][[1]][[1]]$PriSec_overlap_lgl_vec<-rep('In model, primary analyte', nrow(bmr_all_comb) )
+
 ## Rename analytes 
 # !!! FOR VISUALIZATION ONLY. NOT RELEVANT IF OTHER ANALYTES ARE SELECTED, OR IN DIFFERENT ORDER !!!
-GS_comb_primary_tib$Primary_analyte %<>% str_replace('.ZZZ.',' ')
-GS_comb_primary_tib$Primary_analyte[2:5]<-paste('Affy', c('GPR75','EIF4G2','SORBS2','SVEP1'), sep=' ')
+GS_comb_primary_tib$GS_Primary_analyte %<>% str_replace('.ZZZ.',' ')
+GS_comb_primary_tib$GS_Primary_analyte[2:5]<-paste('Affy', c('GPR75','EIF4G2','SORBS2','SVEP1'), sep=' ')
 
 # library(RColorBrewer)
 myColors <- c("#DDDDDD", "#56B4E9", "#0072B2")
 names(myColors) <- c("Not in model", "In model, secondary analyte", "In model, primary analyte")
+#names(myColors) <- c("TRUE", "FALSE", "NA")
 
 
 GS_comb_primary_tib %<>% 
-  mutate(overlap_matrix_ggplot = map2(bmr_all_comb_overlap_matrix_YN, Primary_analyte, ~
-    # .x = GS_comb_primary_tib$bmr_all_comb_overlap_matrix_YN[[1]]; .y = GS_comb_primary_tib$Primary_analyte[[1]]
+  mutate(overlap_matrix_ggplot = map2(bmr_all_comb_overlap_matrix_YN, GS_Primary_analyte, ~
+    # .x = GS_comb_primary_tib$bmr_all_comb_overlap_matrix_YN[[15]]; .y = GS_comb_primary_tib$GS_Primary_analyte[[15]]
     # DF<-.x %>% select(hclust_cutree_h, Univ_top_n, PriSec_overlap_lgl_vec)
       #DF$hclust_cutree_h %>% table; DF$Univ_top_n %>% table
     .x %>% 
       #select(hclust_cutree_h, Univ_top_n, PriSec_overlap_lgl_vec) %>% 
       ggplot() + geom_tile(aes(x = Univ_top_n, y = hclust_cutree_h, fill = PriSec_overlap_lgl_vec)) +
         scale_fill_manual(values = myColors) +
-        labs(x = "Analytes per assay", y = "Min correlation in cluster", title = .y) +
-        scale_y_reverse() +
-        theme(legend.position = "none", text = element_text(size=12), plot.title = element_text(size = 12)) + 
-        theme_bw(base_size = 10) + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+        # labs(x = "Analytes per assay", y = "Min correlation in cluster", title = .y) +
+        labs(x = "", y = "", title = .y) +
+# scale_y_reverse() +
+        theme(legend.position = "none", text = element_text(size=12), 
+              plot.title = element_text(size = 12)) + 
+        theme_bw(base_size = 10) + theme(panel.grid.major = element_blank(), 
+                                         panel.grid.minor = element_blank())
  
   ))
-# GS_comb_primary_tib$overlap_matrix_ggplot[[1]]
+# GS_comb_primary_tib$overlap_matrix_ggplot[[15]] # MLXIP
 
 
-
+## remove some analytes from plot
 Exclude_analytes<-c(6, 8, 11, 16, 17)
 GS_comb_primary_tib_ordered<-GS_comb_primary_tib[c(c(1:18)[-Exclude_analytes], Exclude_analytes),]    
     
-common_legend <- get_legend(GS_comb_primary_tib_ordered$overlap_matrix_ggplot[[1]] + theme(legend.position = "bottom"))
+common_legend<-get_legend(GS_comb_primary_tib_ordered$overlap_matrix_ggplot[[1]] + theme(legend.position = "bottom"))
+# plot_grid(NULL, common_legend, ncol=1)
 
-pg <- plot_grid(plotlist = GS_comb_primary_tib_ordered$overlap_matrix_ggplot %>% map(~.x + theme(legend.position='none')))
+Grid<-plot_grid(plotlist = GS_comb_primary_tib_ordered$overlap_matrix_ggplot %>% map(~.x + theme(legend.position='none')))
+Grid_xlab<-ggdraw(add_sub(Grid, "Analytes per assay"))
+#Grid_yx_shared<-ggdraw(add_sub(Grid_y_shared, "Min correlation in cluster"))
+# Grid_no_axes_shared_legend<-plot_grid(Grid, common_legend, ncol = 1, rel_heights = c(1,.2))
+ggpubr::annotate_figure(Grid_xlab, left = 'Analytes per assay', bottom = common_legend)
 
-plot_grid(pg, common_legend, ncol = 1, rel_heights = c(1,.1))
-pg
 
 
 ```
@@ -356,6 +387,52 @@ Holdout_single_pair_AA$desc$predict = 'both'
 
 ## prediction by default is done here with the learner's original s
 bmr<-benchmark(bmr_tib$lrn_i, task_j, resamplings = Holdout_single_pair_AA, measures = list(rmse))
+
+```
+
+
+
+
+
+
+
+
+
+```{r}
+library(tidyverse)
+library(cowplot)
+
+df <- data.frame(
+  x = rep(c(2, 5, 7, 9, 12), 2),
+  y = rep(c(1, 2), each = 5),
+  z = factor(rep(1:5, each = 2)),
+  w = rep(diff(c(0, 4, 6, 8, 10, 14)), 2)
+)
+
+myColors <- c("#DDDDDD", "#56B4E9", "#0072B2", "#56E4E9", "#0172B2")
+
+
+gg_master<-df %>% ggplot() + geom_tile(aes(x = x, y = y, fill = z)) +
+  scale_fill_manual(values = myColors) +
+  labs(x = "Analytes per assay", y = "Min correlation in cluster") +
+  # scale_y_reverse() +
+  theme(legend.position = "none", text = element_text(size=12), plot.title = element_text(size = 12)) + 
+  theme_bw(base_size = 10) + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+
+gg_1<-gg_master + labs(title = 'g1')
+gg_2<-gg_master + labs(title = 'g2')
+gg_3<-gg_master + labs(title = 'g3')
+gg_4<-gg_master + labs(title = 'g4')
+gg_5<-gg_master + labs(title = 'g5')
+
+
+
+common_legend<-get_legend(GS_comb_primary_tib_ordered$overlap_matrix_ggplot[[1]] + theme(legend.position = "bottom"))
+
+pg<-plot_grid(plotlist = GS_comb_primary_tib_ordered$overlap_matrix_ggplot %>% map(~.x + theme(legend.position='none')))
+
+plot_grid(pg, common_legend, ncol = 1, rel_heights = c(1,.1))
+pg
 
 ```
 

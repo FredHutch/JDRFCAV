@@ -1,0 +1,196 @@
+---
+title: "JDRF resample / cross-validation"
+author: "Dror Berel"
+date: "`r Sys.Date()`"
+output: 
+  rmarkdown::html_vignette:
+    keep_md: TRUE
+    toc: yes
+vignette: >
+  %\VignetteIndexEntry{JDRF resample / cross-validation}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(magrittr)
+library(mlr)
+library(mlrCPO)
+library(glmnet)
+library(biobroom)
+library(limma)
+library(impute)
+library(JDRFCAV)
+# devtools::install_github("FredHutch/JDRFCAV", auth_token = "d91ceb23e7163ee5a7bd5cf748cf0de2e14cac83")
+library(knitr)
+```
+
+
+
+Resampling / cross-validation
+
+
+
+## A. Setup
+# A1. Load raw data sets and scale
+```{r }
+data_task # mlr's task format. currently non-functional, so require sep
+# pre-processing: Scaling 
+task_j<-data_task %>>% cpoScale()
+
+```
+
+
+# A2. mlr's learner setup
+```{r }
+lrn.glmnet.1.orig<-makeLearner(cl= "regr.cvglmnet", par.vals = list(alpha=1, s='lambda.min') ) # s will be override, so value does not matter. if not specified, mlr will assign s=0.01
+
+lrn_PreProcess_glmnet<-Fun_lrn_univ_Clusters_All_makePrep_MaG(lrn.glmnet.1.orig,
+                                                              train_F = F_PreProc_3_UnivClust_Train_MaG,
+                                                              Predict_F = F_PreProc13_BOTH_Predict_MaG,
+                                                              param.Univ.filt.top.n.features = NA, 
+                                                              param.UnivClustRankTopN        = NA, 
+                                                              param.cluster_method_KH        = NA, 
+                                                              param.corrplot.n.clusters.k    = NA, 
+                                                              param.corrplot.n.clusters.h    = NA, 
+                                                              parame.gene.or.module          = NA,
+                                                              param.LASSO.n.features.arbitrary=NA)
+Assay.Analyte.sep<-'.ZZZ.'
+is.numeric(param.impute.knn.k<-20) 
+param.assay.type.vec<-c('Short', 'Long', 'Short', 'Short', rep('Long', 11))
+lrn_PreProcess_glmnet$par.vals[['param.assay.type.vec']]<-param.assay.type.vec
+lrn_PreProcess_glmnet$next.learner$properties %<>% c(., 'missings') # ok to add only because 
+lrn_PreProcess_glmnet
+
+args_1<-list(
+  param.Univ.filt.top.n.features   = 30, 
+  param.UnivClustRankTopN          = 1, 
+  param.cluster_method_KH          = 'method.h', 
+  param.corrplot.n.clusters.k      = 10,  
+  param.corrplot.n.clusters.h      = 0.3, 
+  parame.gene.or.module            = 'gene', 
+  param.LASSO.n.features.arbitrary = 5)
+
+lrn_1<-Func_update_args_univ_clusters(lrn = lrn_PreProcess_glmnet, args_vec = args_1, lrn.id = 'lrn1')    
+
+```
+
+
+
+
+
+
+# B. Benchmark + nested resampling
+
+## B1. brute force: loop (via map) around each combination
+
+### non-stratified
+```{r Resample}
+## 0. setup
+param.LASSO.n.features.arbitrary<-6
+h_seq<-c(0.1, 0.2, 0.25, 0.3, 0.35, 0.4, 0.5, 0.75); top_h_sqe<-c(5, 10, 20, 30, 40, 50)
+
+bmr_tib_setup<-expand.grid(hclust_cutree_h = h_seq, Univ_top_n = top_h_sqe) %>% as.matrix %>% as_tibble
+
+bmr_tib_setup %<>% 
+  mutate(args_vec_i = map2(Univ_top_n, hclust_cutree_h, ~list(.x, 1, 'method.h', 0,  .y, 'gene', param.LASSO.n.features.arbitrary)) ) %>% 
+  mutate(lrd_ID_i = paste0('lrn_', 1:n())) %>% 
+  mutate(lrn_i = map2(args_vec_i, lrd_ID_i, ~Func_update_args_univ_clusters(lrn = lrn_PreProcess_glmnet, args_vec = .x, lrn.id = .y)))
+
+
+lrn_featureless<-makeLearner(cl='regr.featureless')
+rmse_null<-train(lrn_featureless, task_j) %>% predict(task_j) %>% performance(rmse)
+   
+if(FALSE){
+  bmr_tib_setup %<>% 
+    # slice(1:1) %>% 
+    mutate(Resample = lrn_i %>% map(~resample(.x, task_j, 
+                 resampling = makeResampleDesc("Subsample", iter = 5, predict = 'both', split = 0.8),
+                 measures = list(rmse), 
+                 models = FALSE, extract = function(x) getLearnerModel(x) %>% getLearnerModel %>% coef %>%    tidy %>% nrow )))
+}
+# save(bmr_tib, file = 'data/bmr_tib.rdata')
+# load( file = 'data/bmr_tib.rdata') # bmr_tib
+
+ # pre-saved:
+bmr_tib_setup<-bmr_tib
+##################################################################
+# out<-bmr_tib_setup$Resample[[1]]$models[[1]]
+# out$learner.model$next.model$learner.model %>% coef %>% tidy %>% nrow
+# bmr_tib_setup$Resample[[1]]$extract[[1]]$learner.model %>% coef %>% tidy %>% nrow
+
+## Add n_coef from extract
+bmr_tib_setup %<>% 
+  mutate(n_coef_from_extract = Resample %>% map('extract'))
+# bmr_tib_setup %<>% mutate(n_coef_from_model = Resample %>% map_int(~.x$model$learner.model$next.model$learner.model %>% coef %>% tidy %>% nrow))
+# bmr_tib_setup$n_coef_from_extract
+
+## extract AVG_rmse
+bmr_tib_setup %<>% 
+  mutate(rmse_h_n_vec = Resample %>% map('measures.test') %>% map(~.x %>% pull(rmse)) ) %>% 
+  mutate(rmse_h_n_mean = rmse_h_n_vec %>% map_dbl(~.x %>% mean) )
+
+# plot(bmr_tib_setup$n_coef_from_extract %>% unlist, bmr_tib_setup$rmse_h_n_vec %>% unlist); abline(h = rmse_null, col='red')
+
+
+
+  ## Diagnostics RMSE distributions > rmse_null
+  # bmr_tib_setup %<>%  mutate(rmse_h_n_vec_vs_REF = rmse_h_n_vec %>% map(~(.x >rmse_null) %>% table) ) 
+    #.x = bmr_tib_setup$rmse_h_n_vec[[1]]
+   # bmr_tib_setup$rmse_h_n_vec_vs_REF
+   # bmr_tib_setup$rmse_h_n_vec %>% bind_cols %>% boxplot; abline(h=rmse_null, col='red')
+```
+
+
+
+
+
+
+
+## Plot benchmarking + resampling sensitivtiy analysis 
+```{r Plot, fig.height = 8, fig.width = 8}
+
+#stats_disp_df<-read.csv('Z:/R_rhino/JDRF_paper/data/RMSE_benchmarking.csv') # Sam's past results
+#DF_both2<-rbind(DF_rmse, data.frame(stats_disp_df %>% select(hclust_cutree_h = corrplot.n.clusters, Univ_top_n = feature.n, rmse = RMSE_mean), s_opt = 'Sam'))
+
+
+bmr_tib_plot<-bmr_tib_setup %>% 
+  select(Univ_top_n, hclust_cutree_h, rmse_h_n_mean) %>% 
+  mutate(hclust_cutree_h = as.factor(1-hclust_cutree_h) %>% forcats::fct_rev() )
+  # filter(hclust_cutree_h == param.corrplot.n.clusters.h) %>% 
+  
+bmr_tib_plot %>% ggplot() + 
+  geom_line(aes(x = Univ_top_n, y = rmse_h_n_mean, color =  hclust_cutree_h), size = 1.5) +   
+scale_y_continuous(breaks = pretty(c(bmr_tib_plot$rmse_h_n_mean, rmse_null), n = 6)) +
+  theme_bw(base_size = 18) + 
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
+  ylab('Mean cross-validation error (RMSE)') + 
+  xlab('Number of analytes per assay') + 
+  labs(color = "Min correlation within cluster") 
+  
+```
+
+
+
+
+## B2. mlr::benchmark(resamplings = Subsample)
+```{r eval=FALSE}
+## B.2: automatic via mlr::benchmark(). However, no manual control for s.
+# benchmark's default require some additional nested resampling. here will force test to be the same 100% train
+
+
+## prediction by default is done here with the learner's original s
+# bmr_CV<-benchmark(bmr_tib_setup$lrn_i, task_j, resamplings = makeResampleDesc("Subsample", iter = 100, predict = 'both', split = 0.8), measures = list(rmse))
+```
+
+
+
+# ?. Session information
+```{r }
+sessionInfo()
+```
+
+
