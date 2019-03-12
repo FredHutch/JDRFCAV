@@ -1,0 +1,440 @@
+---
+title: "JDRF raw data pre-process"
+author: "Dror Berel"
+date: "`r Sys.Date()`"
+output: 
+  rmarkdown::html_vignette:
+    keep_md: TRUE
+    toc: yes
+vignette: >
+  %\VignetteIndexEntry{JDRF raw data pre-process}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+```{r}
+
+library(tidyverse)
+library(SummarizedExperiment)
+library(MultiAssayExperiment)
+library(mlr)
+
+library(JDRFCAV)
+
+
+
+
+# 1. load and process raw data files for each assay -----------------------
+
+
+
+##### 0. Cohort 2 pre-processing
+Active.Box.folder<-'c:/Users/dberel/Box Sync/'
+
+
+# Design.file.box<-c('CAV Data Sharing/Cohort 2 Clinical and Demographic Data/C-peptide decline calculations - Skinner/data/CAV-Cohort-2_outcomes_parameters_20170323a.csv') ## old.
+Design.file.box<-c('CAV Data Sharing/Cohort 2 Clinical and Demographic Data/C-peptide decline calculations - Skinner/data/CAV-Cohort-2_outcomes_parameters_20170727a.csv') ## August 1, Sam updated the outcomes/clinical file to include some missing values and corrected units for the c-peptide outcomes
+
+Design.cohort2.all<-read.csv(paste(Active.Box.folder, Design.file.box, sep=''))
+Design.cohort2<-Design.cohort2.all %>% filter(cpeptide_visit_name %in% c('Baseline', 'Screening'))
+Design.cohort2$participant_id<-as.character(Design.cohort2$participant_id)
+Design.cohort2<-Design.cohort2[order(Design.cohort2$participant_id),] # later on, has to be by same order of ascending ID as Across.int
+rownames(Design.cohort2)<-Design.cohort2$participant_id
+# Within, c-peptide decline is measured through the model and fit:
+# Model of cpeptide:                   cpep=A*exp(bt)
+# Fit:                                 log(cpep) = log(A) + bt
+
+# cpep_auc2hr                          The c-peptide AUC value normalized by the length of the MMTT: 120 min.
+# cpep_auc2hr_log_baseline             Log of the baseline value of auc2hr.
+# cpep_model_log_baseline              Log of the baseline value from the fit to c-peptide over study.  log(A) from fit.
+# cpep_model_decayrate                 The "decay" rate of c-peptide. The slope b from the fit.
+# cpep_model_absdiff_1year             The difference in c-peptide from the beginning of study to 1 year according to the fit.
+# cpep_model_absdiff_2year             The difference in c-peptide from the beginning of study to 2 year according to the fit.
+
+
+
+
+
+
+
+
+
+#### 1. FACS/MFI
+
+FACS.design.file.box<-("CAV Data Sharing/FACS Immunophenotyping - Long/Cohort 2/FACS_designFile_baseline.csv")
+FACS.design<-read.csv(paste(Active.Box.folder, FACS.design.file.box, sep=''))
+## fix barcode id
+FACS.design$cpeptide_visit_id<-ifelse(str_sub(FACS.design$cpeptide_visit_id, -2, -1)=='-1',
+                                      str_sub(FACS.design$cpeptide_visit_id, -100, -4),
+                                      str_sub(FACS.design$cpeptide_visit_id, -100, -3))
+# FACS.raw.file.box<-("CAV Data Sharing/FACS Immunophenotyping - Long/Cohort 2/FACS_data_baseline.csv") # old feature names
+FACS.raw.file.box<-("CAV Data Sharing/FACS Immunophenotyping - Long/Cohort 2/CAVII_shorten_v2.csv")
+FACS.raw<-read.csv(paste(Active.Box.folder, FACS.raw.file.box, sep=''))
+FACS.join<-inner_join(x=FACS.design, y=FACS.raw, by='Barcode')
+rownames(FACS.join)<-FACS.join$cpeptide_visit_id
+FACS.join<-FACS.join[,13:88] # biomarkers only
+
+####### Impute missing values
+# which(is.na(FACS.join), arr.ind=TRUE)[,'col']
+# FACS.join[is.na(FACS.join)]<-0 ### impute with analyte(column) mean
+for(i in 1:ncol(FACS.join)){
+  # i=1
+  FACS.join[is.na(FACS.join[,i]), i]<-mean(FACS.join[,i], na.rm=TRUE) # FACS.join %>% summarise_all(funs(mean(., na.rm=TRUE)))
+}
+# sum(is.na(FACS.join))
+
+
+
+
+##### 2. mRNA
+mRNA.design.file.box<-("CAV Data Sharing/Affy arrays from serum exposure expt - Hessner/Cohort 2/DataForShinyApp/designAtBaseline.csv")
+mRNA.design<-read.csv(paste(Active.Box.folder, mRNA.design.file.box, sep=''))
+mRNA.design$barcode<-gsub('-', '.' ,mRNA.design$barcode)
+
+## keep only baseline measures (do same at raw data next)
+##  no longer need. Elizabeth updated the raw file. mRNA.design<-mRNA.design %>% filter(month==0) %>% filter(barcode!='921893.H06') # exception for ABATE_002008, keep.H05
+mRNA.data_filt.file.box<-"CAV Data Sharing/Affy arrays from serum exposure expt - Hessner/Cohort 2/DataForShinyApp/filteredAffymetrixData_RemovedDateSent.csv"
+mRNA.data_filt<-read.csv(paste(Active.Box.folder, mRNA.data_filt.file.box, sep=''))
+Probe.id<-mRNA.data_filt$X
+mRNA.data_filt.T<-as.data.frame(t(mRNA.data_filt[,-1]))
+colnames(mRNA.data_filt.T)<-Probe.id
+
+
+mRNA.data_filt.T$barcode<-substr(rownames(mRNA.data_filt.T),2, 100)
+# dim(mRNA.data_filt.T) # this include both baseline, AND day 1. will be filtered by the next inner_join
+
+### Join (design + raw(filt))
+mRNA.join<-inner_join(x=mRNA.design, y=mRNA.data_filt.T, by='barcode')
+mRNA.join<-mRNA.join %>% dplyr::rename(participant_id=ITN_ID)
+rownames(mRNA.join)<-mRNA.join$participant_id
+mRNA.join<-mRNA.join[,19:21186]
+
+
+
+
+###  3. Pro.Insulin
+Pro.Insulin.all.file.box<-c("CAV Data Sharing/Proinsulin C Peptide Ratio - Gorus/Cohort 2/PIC_baseline.csv")
+Pro.Insulin.all<-read.csv(paste(Active.Box.folder, Pro.Insulin.all.file.box, sep=''))
+Pro.Insulin.all<-Pro.Insulin.all %>% dplyr::rename(participant_id_orig=participant_id, participant_id=cpeptide_visit_id)
+rownames(Pro.Insulin.all)<-Pro.Insulin.all$participant_id
+Pro.Insulin.all<-Pro.Insulin.all[,13:14]
+
+## Impute missing values with biomarker's average START_001005, START_010005
+for(i in 1:ncol(Pro.Insulin.all)){
+  # i=1
+  Pro.Insulin.all[is.na(Pro.Insulin.all[,i]), i] <- mean(Pro.Insulin.all[,i], na.rm = TRUE) # Pro.Insulin.all %>% summarise_all(funs(mean(., na.rm=TRUE)))
+}
+
+
+
+
+
+
+
+
+### 4. microRNA
+# Thoug did not end up used in down-selection analysis
+microRNA.NEW.Design.file.box<-c("CAV Data Sharing/miRNA by Exiqon - Pugliese/Cohort 2/designFile_baseline.csv")
+microRNA.NEW.Design<-read.csv(paste(Active.Box.folder, microRNA.NEW.Design.file.box, sep=''))[,1:9]
+
+microRNA.NEW.norm.file.box<-c("CAV Data Sharing/miRNA by Exiqon - Pugliese/Cohort 2/normmiRNA_baseline.csv")
+microRNA.NEW.norm<-read.csv(paste(Active.Box.folder, microRNA.NEW.norm.file.box, sep=''))
+### Join (Design+norm)
+microRNA.NEW.join<-inner_join(x=microRNA.NEW.Design %>% dplyr::rename(Key1=barcode),
+                              y=microRNA.NEW.norm %>% dplyr::rename(Key1=X),
+                              by='Key1') %>% filter(visit_num==0)
+
+microRNA.NEW.join<-microRNA.NEW.join %>% dplyr::rename(participant_id = ITN_ID)
+rownames(microRNA.NEW.join)<-microRNA.NEW.join$participant_id
+microRNA.NEW.join<-microRNA.NEW.join[,10:169]
+microRNA.NEW.join[is.na(microRNA.NEW.join)]<-37 ### imput to 0, until better solution is found
+# sum(is.na(microRNA.NEW.join))
+
+
+
+
+
+
+##### 5. RNAseq
+
+# Bcells
+RNAseq.Bcell.file.box<-"CAV Data Sharing/Presentations and Analysis - Skinner/Data processing and filtering for Dror/CAV-Cohort-2-CellSubset_data/CAV-Cohort-2-RNAseq_Bcell_data_20170224a.RData"
+
+# CD4 T cells
+RNAseq.CD4.file.box<-"CAV Data Sharing/Presentations and Analysis - Skinner/Data processing and filtering for Dror/CAV-Cohort-2-CellSubset_data/CAV-Cohort-2-RNAseq_CD4_data_20170224a.RData"
+
+# CD8 T celle
+RNAseq.CD8.file.box<-"CAV Data Sharing/Presentations and Analysis - Skinner/Data processing and filtering for Dror/CAV-Cohort-2-CellSubset_data/CAV-Cohort-2-RNAseq_CD8_data_20170224a.RData"
+
+# Monocytes
+RNAseq.Monocytes.file.box<-"CAV Data Sharing/Presentations and Analysis - Skinner/Data processing and filtering for Dror/CAV-Cohort-2-CellSubset_data/CAV-Cohort-2-RNAseq_monocyte_data_20170224a.RData"
+
+# Wholeblood
+RNAseq.Wholeblood.file.box<-"CAV Data Sharing/Presentations and Analysis - Skinner/Data processing and filtering for Dror/CAV-Cohort-2-WholeBlood_data/CAV-Cohort-2-RNAseq-WholeBlood_data_20170516b.RData" # 5/16/17
+
+
+Cell.type.input.vec<-c('Bcell',     RNAseq.Bcell.file.box,
+                       'CD4',       RNAseq.CD4.file.box,
+                       'CD8',       RNAseq.CD8.file.box,
+                       'Monocyte',  RNAseq.Monocytes.file.box,
+                       'Wholeblood',RNAseq.Wholeblood.file.box)
+Cell.type.input.Matrix<-matrix(Cell.type.input.vec, 5, 2, byrow = TRUE)
+
+RNA.seq.pre.process.function<-function(i, Cell.type.input.Matrix){
+  # i=1
+  print(Cell.type.input.Matrix[i,1])
+  load(paste(Active.Box.folder, Cell.type.input.Matrix[i,2], sep=''))
+  cur.ENSG<-cbind(curDGE$genes, curDGE$E)
+  cur.Genes<-cur.ENSG[,-c(1,2,4,5)] %>%
+    group_by(symbol) %>%
+    summarise_each(funs(sum)) %>% ### !!! Sum, rather than mean
+    #filter(!is.na(symbol)) %>%
+    data.frame %>%
+    column_to_rownames('symbol')
+  # head(cur.Genes)
+  designDat.i<-data.frame(Cohort1ID=colnames(cur.Genes))
+  return(list(X.RNAseq.i            =data.frame(t(cur.Genes)),
+              Features.cols.RNAseq.i=1:nrow(cur.Genes),
+              Design.RNAseq.i       =designDat.i,
+              Assay.Name            =paste('RNAseq', Cell.type.input.Matrix[i,1])
+  ))
+}
+
+B.5.a.gene<-RNA.seq.pre.process.function(1, Cell.type.input.Matrix) # Bcell
+B.5.b.gene<-RNA.seq.pre.process.function(2, Cell.type.input.Matrix) #
+B.5.c.gene<-RNA.seq.pre.process.function(3, Cell.type.input.Matrix) #
+B.5.d.gene<-RNA.seq.pre.process.function(4, Cell.type.input.Matrix) #
+B.5.e.gene<-RNA.seq.pre.process.function(5, Cell.type.input.Matrix) #
+
+RNAseq.list<-list(B.5.a.gene, B.5.b.gene, B.5.c.gene, B.5.d.gene, B.5.e.gene)
+
+
+
+
+###### 6. Treg
+Treg.all.file.box<-c("CAV Data Sharing/Presentations and Analysis - Skinner/Data processing and filtering for Dror/CAV-Cohort-2-Treg_Nanostring_signature/CAV-Cohort-2-Treg_data_20170425a")
+load(paste(Active.Box.folder, Treg.all.file.box, sep=''))
+Treg.raw<-data.frame(t(dat[[2]]))
+Treg.raw<-Treg.raw[,-17]
+
+
+
+
+
+
+##### 7. Modules_RNAseq
+
+# Bcells
+RNAseq.Mod.Bcell.file.box<-"CAV Data Sharing/Presentations and Analysis - Skinner/Data processing and filtering for Dror/CAV-Cohort-2-CellSubset_data/CAV-Cohort-2-RNAseq_Bcell_WGCNAModules_20170327a.RData"
+
+# CD4 T cells
+RNAseq.Mod.CD4.file.box<-"CAV Data Sharing/Presentations and Analysis - Skinner/Data processing and filtering for Dror/CAV-Cohort-2-CellSubset_data/CAV-Cohort-2-RNAseq_CD4_WGCNAModules_20170327a.RData"
+
+# CD8 T celle
+RNAseq.Mod.CD8.file.box<-"CAV Data Sharing/Presentations and Analysis - Skinner/Data processing and filtering for Dror/CAV-Cohort-2-CellSubset_data/CAV-Cohort-2-RNAseq_CD8_WGCNAModules_20170327a.RData"
+
+# Monocytes
+RNAseq.Mod.Monocytes.file.box<-"CAV Data Sharing/Presentations and Analysis - Skinner/Data processing and filtering for Dror/CAV-Cohort-2-CellSubset_data/CAV-Cohort-2-RNAseq_monocyte_WGCNAModules_20170327a.RData"
+
+# Wholeblood
+RNAseq.Mod.Wholeblood.file.box<-"CAV Data Sharing/Presentations and Analysis - Skinner/Data processing and filtering for Dror/CAV-Cohort-2-WholeBlood_data/CAV-Cohort-2-RNAseq_WholeBlood_WGCNAModules_20170516b.RData"  # 5/16/17
+
+
+### extract BOTH MEs (pre-calculated eigen (average-like) intensities PER Module) and sets (modules)
+Cell.type.input.vec<-c('Bcell',     RNAseq.Mod.Bcell.file.box,
+                       'CD4',       RNAseq.Mod.CD4.file.box,
+                       'CD8',       RNAseq.Mod.CD8.file.box,
+                       'Monocyte',  RNAseq.Mod.Monocytes.file.box,
+                       'Wholeblood',RNAseq.Mod.Wholeblood.file.box)
+Cell.type.input.Matrix<-matrix(Cell.type.input.vec, 5, 2, byrow = TRUE)
+
+RNA.seq.Mod.pre.process.function<-function(i, Cell.type.input.Matrix){
+  # i=1
+  # print(Cell.type.input.Matrix[i,1])
+  load(paste(Active.Box.folder, Cell.type.input.Matrix[i,2], sep=''))
+
+
+  # 1. Sam's pre-calculated eigen (average-like) intensities PER Module:
+  cur.Mods<-MEs
+  # head(cur.Mods)
+  designDat.i<-data.frame(Cohort1ID=rownames(cur.Mods))
+  out.1.eigen.Assays<-list(X.RNAseq.i            =data.frame(cur.Mods),
+                           Features.cols.RNAseq.i=1:ncol(cur.Mods),
+                           Design.RNAseq.i       =designDat.i,
+                           Assay.Name            =paste('RNAseqMods', Cell.type.input.Matrix[i,1]))
+
+  out.2.module.sets<-modules
+  #### need to make sure later on all pathways' names across all sets are unique
+  names(out.2.module.sets)<-paste(Cell.type.input.Matrix[i,1], names(out.2.module.sets), sep='.')
+
+  return(list(out.1.eigen.Assays, out.2.module.sets))
+}
+
+
+B.7.a.mods<-RNA.seq.Mod.pre.process.function(1, Cell.type.input.Matrix)[[1]] # Bcell
+B.7.b.mods<-RNA.seq.Mod.pre.process.function(2, Cell.type.input.Matrix)[[1]] #
+B.7.c.mods<-RNA.seq.Mod.pre.process.function(3, Cell.type.input.Matrix)[[1]] #
+B.7.d.mods<-RNA.seq.Mod.pre.process.function(4, Cell.type.input.Matrix)[[1]] #
+B.7.e.mods<-RNA.seq.Mod.pre.process.function(5, Cell.type.input.Matrix)[[1]] #
+
+RNAseq.Mod.list<-list(B.7.a.mods, B.7.b.mods, B.7.c.mods, B.7.d.mods, B.7.e.mods)
+
+#### gene set members lists
+RNAseq.Mod.member.list<-list(M.RNAseq.cell      =RNA.seq.Mod.pre.process.function(1, Cell.type.input.Matrix)[[2]], # Bcell
+                             M.RNAseq.CD4       =RNA.seq.Mod.pre.process.function(2, Cell.type.input.Matrix)[[2]] ,
+                             M.RNAseq.CD8       =RNA.seq.Mod.pre.process.function(3, Cell.type.input.Matrix)[[2]] ,
+                             M.RNAseq.Monocyte  =RNA.seq.Mod.pre.process.function(4, Cell.type.input.Matrix)[[2]] ,
+                             M.RNAseq.Wholeblood=RNA.seq.Mod.pre.process.function(5, Cell.type.input.Matrix)[[2]])
+# RNAseq.Mod.member.list %>% map(length)
+
+
+
+
+
+
+
+# 8. Modules: mRNA
+
+## 8.1 eigen values
+# B.Affy.eigen.file.box<-"CAV Data Sharing/Affy arrays from serum exposure expt - Hessner/Cohort 2/WGCNA/Affy_WGCNAeigenGenes.csv"
+B.Affy.eigen.file.box<-"CAV Data Sharing/Affy arrays from serum exposure expt - Hessner/Cohort 2/WGCNA/Affy_WGCNAeigenGenes_noMod0.csv"  # revised, 8/11
+B.Affy.eigen<-read.csv(paste(Active.Box.folder, B.Affy.eigen.file.box, sep='')) %>%
+  dplyr::rename(barcode=X)
+B.Affy.eigen$barcode<-as.character(B.Affy.eigen$barcode) %>%
+  substr(2, 100) # get rid of X prefix
+B.Affy.eigen.join<-left_join(x=B.Affy.eigen , y=mRNA.design , by='barcode') %>%
+  column_to_rownames('ITN_ID') %>%
+  dplyr::select(names(B.Affy.eigen)[-1])
+
+
+
+## 8.2 sets (ignore set 0)
+B.Affy.module.set.file.box<-"CAV Data Sharing/Affy arrays from serum exposure expt - Hessner/Cohort 2/WGCNA/moduleAssignment.csv"
+B.Affy.module.set.long<-read.csv(paste(Active.Box.folder, B.Affy.module.set.file.box, sep=''))
+B.Affy.module.set.long<-B.Affy.module.set.long #%>% mutate(XaffyID=make.names(affyID)) ## add X, for later on, when feature names can't begin with number
+
+B.Affy.module.set<-B.Affy.module.set.long %>% filter(module!=0, symbol!='---') %>%
+  group_by(module) %>% tidyr::nest() %>%
+  mutate(all_affyID = data %>% map('affyID')) #, lgl=        map(all_affyID, duplicated))  # probe IDs are unique
+
+
+B.Affy.module.set.list<-B.Affy.module.set$all_affyID
+names(B.Affy.module.set.list)<-paste('M.mRNA_ME', B.Affy.module.set$module, sep='')
+B.Affy.module.set.list<-list(B.Affy.module.set.list)
+names(B.Affy.module.set.list)<-'B.affy'
+
+###### merge all modules sets
+# MsigDB and BTM were imported from GMT file on Rhino, via M_camera.r that require Unix server (foreach multi cluster)
+load('data/GSEA_gene_IDs_list_all.RData') # GSEA_gene_IDs_list_all %>% map(length)
+# GSEA_gene_IDs_list_all %>% names
+mod_MsigDB.tib  <-enframe(GSEA_gene_IDs_list_all, 'Gmt.name', 'GMT.list')
+mod_B.affy.tib  <-enframe(B.Affy.module.set.list, 'Gmt.name', 'GMT.list')
+mod_B.RNAseq.tib<-enframe(RNAseq.Mod.member.list, 'Gmt.name', 'GMT.list')
+
+mod_all.sets.tib<-rbind(mod_MsigDB.tib, mod_B.affy.tib, mod_B.RNAseq.tib)
+
+Filter.out.meta.sets<-c('c5-GO', 'h-Hallmark') # from toggle: not is selected multi box
+mod_all.sets.tib.selected<-mod_all.sets.tib %>% filter(! Gmt.name %in% Filter.out.meta.sets) # Filter OUT meta-sets
+
+# Before unlist, assure there is no overlap pathway names across all sets, if there is, make the name uniqe, e.g. for each set: unite('set_name', pathawy_name)
+if( all(unlist(mod_all.sets.tib.selected$GMT.list ,recursive = FALSE) %>% names %>% table !=1)) '!!! some overlap pathway names across all sets'
+mod_all.sets.tib.selected_merged_meta_sets<-unlist(mod_all.sets.tib.selected$GMT.list, recursive = FALSE) # assume list names at each of 4 sublists is unique, and no overlap across 4 lists
+
+
+
+
+
+######  2. combine all assays into a list -> MAE
+# including raw, Eigen assay-like, and Module Meta-lists
+Assay.raw.list<-list(
+  Design.cohort.2      =Design.cohort2,   # 1
+
+  FACS                 =FACS.join,        # 2
+  microRNA             =microRNA.NEW.join,# 3 microRNA.join            =microRNA.join,   # 2
+  mRNA                 =mRNA.join,        # 4
+  Pro.Insulin          =Pro.Insulin.all,  # 5
+  Treg                 =Treg.raw,         # 6
+  RNAseq.Bcell         =B.5.a.gene[[1]],  # 7
+  RNAseq.CD4           =B.5.b.gene[[1]],  # 8
+  RNAseq.CD8           =B.5.c.gene[[1]],  # 9
+  RNAseq.Monocytes     =B.5.d.gene[[1]],  # 10
+  RNAseq.Wholeblood    =B.5.e.gene[[1]],  # 11
+
+  ### Assay-like Eigen modules
+  mRNA.Mods            =B.Affy.eigen.join,# 12
+  RNAseqMods.Bcell     =B.7.a.mods[[1]],  # 13
+  RNAseqMods.CD4       =B.7.b.mods[[1]],  # 14
+  RNAseqMods.CD8       =B.7.c.mods[[1]],  # 15
+  RNAseqMods.Monocytes =B.7.d.mods[[1]],  # 16
+  RNAseqMods.Wholeblood=B.7.e.mods[[1]],  # 17
+
+  ### list
+  mod_all.sets.tib     =mod_all.sets.tib  # 18 ## to be filtered and unlist() later on
+)
+# Assay.raw.list[1:17] %>% map(dim)
+# sum(is.na(Assay.raw.list[1][[1]]))
+# Assay.raw.list %>% enframe()
+
+# source('box_to_MAE_to_task_Functions.r')
+MultiAssay.cohort.2<-store_All_list_into_MAE(Assay.raw.list[2:17], Assay.raw.list[1][[1]])
+MultiAssay.cohort.2 %>% experiments %>% as.list %>% map(nrow) %>% unlist
+
+
+
+
+# 3. MAE filter -----------------------------------------------
+param.cohort<-c('cohort2')
+param.rv144.mRNA.collapse.multiple.probes<-FALSE
+Assay.Analyte.sep<-'.ZZZ.'
+is.character(param.Selected.Meta.sets<-c("BMT", "c5-GO", "c7-immunologic", "h-Hallmark", "B.affy", "M.RNAseq.cell", "M.RNAseq.CD4", "M.RNAseq.CD8", "M.RNAseq.Monocyte", "M.RNAseq.Wholeblood")[1:10]) ## remove non-Symbol sets
+parame.gene.or.module<-'gene'
+
+MultiAssay.cohort.2 %>% names
+is.numeric(param.assays.vector<-c(1:16)[c(-2)]) # all assays withOUT microRNA
+is.character(param.Y.name<-c('cpep_model_absdiff_2year','cpeptide_visit_number','cpep_model_decayrate')[3])   ## Yi.setting
+is.character(param.covariates<-c('sex','age_years','bmi','cpep_auc2hr_log_baseline','study')[1:5])
+is.character(param.subjects.study<-c('START','T1DAL','ABATE')[1:2])
+
+metadata.raw.table<-tibble(Assay=names(MultiAssay.cohort.2),
+                           Assay.type=rep('Long', 16)) ### rund Long for all assays, to be comparible to mlr PreProc
+
+Setup.returned.list<-Setup.plue.MAE.to.vertical.function(MultiAssay.cohort.2, param.Y.name, param.assays.vector, param.subjects.study, param.cohort, param.covariates, param.rv144.mRNA.collapse.multiple.probes, parame.gene.or.module, param.Selected.Meta.sets, Assay.Analyte.sep)
+
+
+
+
+
+
+
+# 4. Filtered MAE -> task ------------------------------------------------
+Y.raw            <-Setup.returned.list$Y.raw
+DF.long.scaled   <-Setup.returned.list$DF.long.scaled
+Covariates.scaled<-Setup.returned.list$Covariates.scaled
+My.family        <-Setup.returned.list$My.family
+# select() must by dplyr by default!
+mod_all.sets.tib.selected_merged_meta_sets<-Setup.returned.list$mod_all.sets.tib.selected_merged_meta_sets
+Join_SumEset.C2.complete.Y<-Setup.returned.list$Join_SumEset.C2.complete.Y # to be used to extract mRNA symbol at rv144, to convert probe id
+if(!is.null(Covariates.scaled)) names(Covariates.scaled)<-paste0('Covariate_', names(Covariates.scaled)) # so later they could be seperated again
+mlr.Data<-data.frame(Y.raw, DF.long.scaled, check.names=TRUE)  ## require conditional if for 0 covariates!
+if( !is.null(Covariates.scaled) ){
+  mlr.Data<-data.frame(Y.raw, DF.long.scaled, Covariates.scaled, check.names=TRUE)  ## require conditional if for 0 covariates!
+}
+task<-makeRegrTask(data=mlr.Data, target=colnames(Y.raw)) # with covariates!
+task
+# data_task<-task # over-ride for testing purposes
+# task %>% getTaskFeatureNames %>% substr(1, 8) %>% table()
+
+# library(Bioc2mlr)
+# task_Bioc2mlr<-Fun_SE_to_taskFunc(Join_SumEset.C2.complete.Y, param.Y.name, param.covariates,
+#                                  param_positive_y_level, task_return_format, task_type)
+
+
+
+```
+
