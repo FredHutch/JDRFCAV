@@ -37,9 +37,9 @@ library(JDRFCAV)
 ##### 0. Cohort 2 pre-processing
 Active.Box.folder<-'c:/Users/dberel/Box Sync/'
 
-
-# Design.file.box<-c('CAV Data Sharing/Cohort 2 Clinical and Demographic Data/C-peptide decline calculations - Skinner/data/CAV-Cohort-2_outcomes_parameters_20170323a.csv') ## old.
-Design.file.box<-c('CAV Data Sharing/Cohort 2 Clinical and Demographic Data/C-peptide decline calculations - Skinner/data/CAV-Cohort-2_outcomes_parameters_20170727a.csv') ## August 1, Sam updated the outcomes/clinical file to include some missing values and corrected units for the c-peptide outcomes
+###################################################################################
+Design.file.box<-c('CAV Data Sharing/Cohort 2 Clinical and Demographic Data/C-peptide decline calculations - Skinner/data/CAV-Cohort-2_outcomes_parameters_20170727a.csv')
+###################################################################################
 
 Design.cohort2.all<-read.csv(paste(Active.Box.folder, Design.file.box, sep=''))
 Design.cohort2<-Design.cohort2.all %>% filter(cpeptide_visit_name %in% c('Baseline', 'Screening'))
@@ -66,23 +66,24 @@ rownames(Design.cohort2)<-Design.cohort2$participant_id
 
 
 #### 1. FACS/MFI
-
+###################################################################################
 FACS.design.file.box<-("CAV Data Sharing/FACS Immunophenotyping - Long/Cohort 2/FACS_designFile_baseline.csv")
+###################################################################################
 FACS.design<-read.csv(paste(Active.Box.folder, FACS.design.file.box, sep=''))
 ## fix barcode id
 FACS.design$cpeptide_visit_id<-ifelse(str_sub(FACS.design$cpeptide_visit_id, -2, -1)=='-1',
                                       str_sub(FACS.design$cpeptide_visit_id, -100, -4),
                                       str_sub(FACS.design$cpeptide_visit_id, -100, -3))
-# FACS.raw.file.box<-("CAV Data Sharing/FACS Immunophenotyping - Long/Cohort 2/FACS_data_baseline.csv") # old feature names
+
+###################################################################################
 FACS.raw.file.box<-("CAV Data Sharing/FACS Immunophenotyping - Long/Cohort 2/CAVII_shorten_v2.csv")
+###################################################################################
 FACS.raw<-read.csv(paste(Active.Box.folder, FACS.raw.file.box, sep=''))
 FACS.join<-inner_join(x=FACS.design, y=FACS.raw, by='Barcode')
 rownames(FACS.join)<-FACS.join$cpeptide_visit_id
 FACS.join<-FACS.join[,13:88] # biomarkers only
 
 ####### Impute missing values
-# which(is.na(FACS.join), arr.ind=TRUE)[,'col']
-# FACS.join[is.na(FACS.join)]<-0 ### impute with analyte(column) mean
 for(i in 1:ncol(FACS.join)){
   # i=1
   FACS.join[is.na(FACS.join[,i]), i]<-mean(FACS.join[,i], na.rm=TRUE) # FACS.join %>% summarise_all(funs(mean(., na.rm=TRUE)))
@@ -93,21 +94,31 @@ for(i in 1:ncol(FACS.join)){
 
 
 ##### 2. mRNA
+###################################################################################
 mRNA.design.file.box<-("CAV Data Sharing/Affy arrays from serum exposure expt - Hessner/Cohort 2/DataForShinyApp/designAtBaseline.csv")
+###################################################################################
 mRNA.design<-read.csv(paste(Active.Box.folder, mRNA.design.file.box, sep=''))
 mRNA.design$barcode<-gsub('-', '.' ,mRNA.design$barcode)
 
+
+
+
 ## keep only baseline measures (do same at raw data next)
 ##  no longer need. Elizabeth updated the raw file. mRNA.design<-mRNA.design %>% filter(month==0) %>% filter(barcode!='921893.H06') # exception for ABATE_002008, keep.H05
+
+###################################################################################
 mRNA.data_filt.file.box<-"CAV Data Sharing/Affy arrays from serum exposure expt - Hessner/Cohort 2/DataForShinyApp/filteredAffymetrixData_RemovedDateSent.csv"
+###################################################################################
 mRNA.data_filt<-read.csv(paste(Active.Box.folder, mRNA.data_filt.file.box, sep=''))
+# mRNA.data_filt %<>% dplyr::rename(X911285.H02 = X911285H02)
 Probe.id<-mRNA.data_filt$X
 mRNA.data_filt.T<-as.data.frame(t(mRNA.data_filt[,-1]))
 colnames(mRNA.data_filt.T)<-Probe.id
+# dim(mRNA.data_filt)
+# mRNA.data_filt[1:3, 1:15]
 
 
-mRNA.data_filt.T$barcode<-substr(rownames(mRNA.data_filt.T),2, 100)
-# dim(mRNA.data_filt.T) # this include both baseline, AND day 1. will be filtered by the next inner_join
+mRNA.data_filt.T$barcode<-substr(rownames(mRNA.data_filt.T),2, 100) # dim(mRNA.data_filt.T) # this include both baseline, AND day 1. will be filtered by the next inner_join
 
 ### Join (design + raw(filt))
 mRNA.join<-inner_join(x=mRNA.design, y=mRNA.data_filt.T, by='barcode')
@@ -119,7 +130,9 @@ mRNA.join<-mRNA.join[,19:21186]
 
 
 ###  3. Pro.Insulin
+###################################################################################
 Pro.Insulin.all.file.box<-c("CAV Data Sharing/Proinsulin C Peptide Ratio - Gorus/Cohort 2/PIC_baseline.csv")
+###################################################################################
 Pro.Insulin.all<-read.csv(paste(Active.Box.folder, Pro.Insulin.all.file.box, sep=''))
 Pro.Insulin.all<-Pro.Insulin.all %>% dplyr::rename(participant_id_orig=participant_id, participant_id=cpeptide_visit_id)
 rownames(Pro.Insulin.all)<-Pro.Insulin.all$participant_id
@@ -139,8 +152,10 @@ for(i in 1:ncol(Pro.Insulin.all)){
 
 
 ### 4. microRNA
-# Thoug did not end up used in down-selection analysis
+# Though did not end up used in down-selection analysis
+###################################################################################
 microRNA.NEW.Design.file.box<-c("CAV Data Sharing/miRNA by Exiqon - Pugliese/Cohort 2/designFile_baseline.csv")
+###################################################################################
 microRNA.NEW.Design<-read.csv(paste(Active.Box.folder, microRNA.NEW.Design.file.box, sep=''))[,1:9]
 
 microRNA.NEW.norm.file.box<-c("CAV Data Sharing/miRNA by Exiqon - Pugliese/Cohort 2/normmiRNA_baseline.csv")
@@ -163,6 +178,7 @@ microRNA.NEW.join[is.na(microRNA.NEW.join)]<-37 ### imput to 0, until better sol
 
 ##### 5. RNAseq
 
+###################################################################################
 # Bcells
 RNAseq.Bcell.file.box<-"CAV Data Sharing/Presentations and Analysis - Skinner/Data processing and filtering for Dror/CAV-Cohort-2-CellSubset_data/CAV-Cohort-2-RNAseq_Bcell_data_20170224a.RData"
 
@@ -177,7 +193,7 @@ RNAseq.Monocytes.file.box<-"CAV Data Sharing/Presentations and Analysis - Skinne
 
 # Wholeblood
 RNAseq.Wholeblood.file.box<-"CAV Data Sharing/Presentations and Analysis - Skinner/Data processing and filtering for Dror/CAV-Cohort-2-WholeBlood_data/CAV-Cohort-2-RNAseq-WholeBlood_data_20170516b.RData" # 5/16/17
-
+###################################################################################
 
 Cell.type.input.vec<-c('Bcell',     RNAseq.Bcell.file.box,
                        'CD4',       RNAseq.CD4.file.box,
@@ -187,10 +203,11 @@ Cell.type.input.vec<-c('Bcell',     RNAseq.Bcell.file.box,
 Cell.type.input.Matrix<-matrix(Cell.type.input.vec, 5, 2, byrow = TRUE)
 
 RNA.seq.pre.process.function<-function(i, Cell.type.input.Matrix){
-  # i=1
+  # i=5
   print(Cell.type.input.Matrix[i,1])
   load(paste(Active.Box.folder, Cell.type.input.Matrix[i,2], sep=''))
   cur.ENSG<-cbind(curDGE$genes, curDGE$E)
+  cur.ENSG %>% dim
   cur.Genes<-cur.ENSG[,-c(1,2,4,5)] %>%
     group_by(symbol) %>%
     summarise_each(funs(sum)) %>% ### !!! Sum, rather than mean
@@ -218,7 +235,9 @@ RNAseq.list<-list(B.5.a.gene, B.5.b.gene, B.5.c.gene, B.5.d.gene, B.5.e.gene)
 
 
 ###### 6. Treg
+###################################################################################
 Treg.all.file.box<-c("CAV Data Sharing/Presentations and Analysis - Skinner/Data processing and filtering for Dror/CAV-Cohort-2-Treg_Nanostring_signature/CAV-Cohort-2-Treg_data_20170425a")
+###################################################################################
 load(paste(Active.Box.folder, Treg.all.file.box, sep=''))
 Treg.raw<-data.frame(t(dat[[2]]))
 Treg.raw<-Treg.raw[,-17]
@@ -230,6 +249,7 @@ Treg.raw<-Treg.raw[,-17]
 
 ##### 7. Modules_RNAseq
 
+###################################################################################
 # Bcells
 RNAseq.Mod.Bcell.file.box<-"CAV Data Sharing/Presentations and Analysis - Skinner/Data processing and filtering for Dror/CAV-Cohort-2-CellSubset_data/CAV-Cohort-2-RNAseq_Bcell_WGCNAModules_20170327a.RData"
 
@@ -244,7 +264,7 @@ RNAseq.Mod.Monocytes.file.box<-"CAV Data Sharing/Presentations and Analysis - Sk
 
 # Wholeblood
 RNAseq.Mod.Wholeblood.file.box<-"CAV Data Sharing/Presentations and Analysis - Skinner/Data processing and filtering for Dror/CAV-Cohort-2-WholeBlood_data/CAV-Cohort-2-RNAseq_WholeBlood_WGCNAModules_20170516b.RData"  # 5/16/17
-
+###################################################################################
 
 ### extract BOTH MEs (pre-calculated eigen (average-like) intensities PER Module) and sets (modules)
 Cell.type.input.vec<-c('Bcell',     RNAseq.Mod.Bcell.file.box,
@@ -302,8 +322,9 @@ RNAseq.Mod.member.list<-list(M.RNAseq.cell      =RNA.seq.Mod.pre.process.functio
 # 8. Modules: mRNA
 
 ## 8.1 eigen values
-# B.Affy.eigen.file.box<-"CAV Data Sharing/Affy arrays from serum exposure expt - Hessner/Cohort 2/WGCNA/Affy_WGCNAeigenGenes.csv"
+###################################################################################
 B.Affy.eigen.file.box<-"CAV Data Sharing/Affy arrays from serum exposure expt - Hessner/Cohort 2/WGCNA/Affy_WGCNAeigenGenes_noMod0.csv"  # revised, 8/11
+###################################################################################
 B.Affy.eigen<-read.csv(paste(Active.Box.folder, B.Affy.eigen.file.box, sep='')) %>%
   dplyr::rename(barcode=X)
 B.Affy.eigen$barcode<-as.character(B.Affy.eigen$barcode) %>%
@@ -315,7 +336,9 @@ B.Affy.eigen.join<-left_join(x=B.Affy.eigen , y=mRNA.design , by='barcode') %>%
 
 
 ## 8.2 sets (ignore set 0)
+###################################################################################
 B.Affy.module.set.file.box<-"CAV Data Sharing/Affy arrays from serum exposure expt - Hessner/Cohort 2/WGCNA/moduleAssignment.csv"
+###################################################################################
 B.Affy.module.set.long<-read.csv(paste(Active.Box.folder, B.Affy.module.set.file.box, sep=''))
 B.Affy.module.set.long<-B.Affy.module.set.long #%>% mutate(XaffyID=make.names(affyID)) ## add X, for later on, when feature names can't begin with number
 
@@ -331,7 +354,9 @@ names(B.Affy.module.set.list)<-'B.affy'
 
 ###### merge all modules sets
 # MsigDB and BTM were imported from GMT file on Rhino, via M_camera.r that require Unix server (foreach multi cluster)
+###################################################################################
 load('data/GSEA_gene_IDs_list_all.RData') # GSEA_gene_IDs_list_all %>% map(length)
+###################################################################################
 # GSEA_gene_IDs_list_all %>% names
 mod_MsigDB.tib  <-enframe(GSEA_gene_IDs_list_all, 'Gmt.name', 'GMT.list')
 mod_B.affy.tib  <-enframe(B.Affy.module.set.list, 'Gmt.name', 'GMT.list')
@@ -402,7 +427,7 @@ is.character(param.covariates<-c('sex','age_years','bmi','cpep_auc2hr_log_baseli
 is.character(param.subjects.study<-c('START','T1DAL','ABATE')[1:2])
 
 metadata.raw.table<-tibble(Assay=names(MultiAssay.cohort.2),
-                           Assay.type=rep('Long', 16)) ### rund Long for all assays, to be comparible to mlr PreProc
+                           Assay.type=rep('Long', 16)) ### run Long (limma) for all assays, to be comparible to mlr PreProc
 
 Setup.returned.list<-Setup.plue.MAE.to.vertical.function(MultiAssay.cohort.2, param.Y.name, param.assays.vector, param.subjects.study, param.cohort, param.covariates, param.rv144.mRNA.collapse.multiple.probes, parame.gene.or.module, param.Selected.Meta.sets, Assay.Analyte.sep)
 

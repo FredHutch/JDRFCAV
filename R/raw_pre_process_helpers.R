@@ -69,6 +69,8 @@ store_All_list_into_MAE<-function(All.list.raw.only, pData.in){
 Setup.plue.MAE.to.vertical.function<-function(MAE, param.Y.name, param.assays.vector, param.subjects.study, param.cohort, param.covariates, param.rv144.mRNA.collapse.multiple.probes, parame.gene.or.module, param.Selected.Meta.sets, Assay.Analyte.sep){
   # MAE=RNAseq.Wholeblood.MAE; RNAseq.Wholeblood.MAE=1, param.cohort
   # MAE=MAE.CAV; param.assays.vector=1
+  select<-dplyr::select
+
   ### 2.1 test MAE level:
   if (! param.Y.name %in% names(colData(MAE))) cat('param.Y.name is not in colData(MAE)')
 
