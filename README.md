@@ -35,7 +35,7 @@ pacakge.
 
 ## Vision:
 
-![](man/figures/Slide1.jpg)<!-- -->![](man/figures/Slide2.jpg)<!-- -->![](man/figures/Slide3.jpg)<!-- -->
+![](man/figures/Slide1.JPG)<!-- -->![](man/figures/Slide2.JPG)<!-- -->![](man/figures/Slide3.JPG)<!-- -->
 
 ## Installation
 

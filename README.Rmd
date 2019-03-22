@@ -29,9 +29,9 @@ Feature selection methods are implemented via a high-level machine learning appr
 
 ## Vision:
 ```{r, echo = F}
-knitr::include_graphics("man/figures/Slide1.jpg")
-knitr::include_graphics("man/figures/Slide2.jpg")
-knitr::include_graphics("man/figures/Slide3.jpg")
+knitr::include_graphics("man/figures/Slide1.JPG")
+knitr::include_graphics("man/figures/Slide2.JPG")
+knitr::include_graphics("man/figures/Slide3.JPG")
 
 ```
 
