@@ -321,7 +321,9 @@ fData<-AnnotatedDataFrame(featData)
 affyEset<-ExpressionSet(assayData=as.matrix(expData0), phenoData=pData, featureData=fData, annotation="hgu133plus2")
 
 #################################################################################################
-affyEsetFilter<-nsFilter(affyEset, remove.dupEntrez=FALSE, var.func=IQR, var.cutoff=0.495)$eset
+#affyEsetFilter<-nsFilter(affyEset, remove.dupEntrez=FALSE, var.func=function(x) stats::IQR(x, type=1), var.cutoff=0.5)$eset
+affyEsetFilter<-nsFilter(affyEset, remove.dupEntrez=FALSE, var.func=IQR, var.cutoff=0.5)$eset
+
 dim(affyEsetFilter)	# now have 21,168 genes to look at
 #################################################################################################
 matchIndex1<-match(list1, rownames(exprs(affyEset)))
@@ -607,6 +609,7 @@ affyEsetNoDateList2<-affyEsetNoDateList2[,-remIndex]
 hessDesignSub0r<-hessDesignSub0[-remIndex,]
 
 # write 4 sets out to file
+dim(affyEsetNoDateFilter)
 #write.csv(affyEsetNoDate, file="/Users/ewhalen/Projects/CAV/Results/Cohort2/Affy/fullAffymetrixData_RemovedDateSent.csv")
 write.csv(affyEsetNoDateFilter, file=paste0(Folder_location,"filteredAffymetrixData_RemovedDateSent.csv"))
 #write.csv(affyEsetNoDateList1, file="/Users/ewhalen/Projects/CAV/Results/Cohort2/Affy/list1AffymetrixData_RemovedDateSent.csv")

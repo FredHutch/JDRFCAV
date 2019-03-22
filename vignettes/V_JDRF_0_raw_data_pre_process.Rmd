@@ -31,15 +31,87 @@ library(JDRFCAV)
 
 
 # 1. load and process raw data files for each assay -----------------------
+Active.Box.folder<-'BOX/'
+
+
+##### 0. Cohort 2 pre-processing
+Design.file.box<-c('CAV-Cohort-2_outcomes_parameters_20170727a.csv')
+
+
+#### 1. FACS/MFI
+FACS.design.file.box<-("FACS_designFile_baseline.csv")
+
+FACS.raw.file.box<-("CAVII_shorten_v2.csv")
+
+
+##### 2. mRNA
+mRNA.design.file.box<-("designAtBaseline.csv")
+
+mRNA.data_filt.file.box<-"filteredAffymetrixData_RemovedDateSent.csv"
+
+
+###  3. Pro.Insulin
+Pro.Insulin.all.file.box<-c("PIC_baseline.csv")
+
+
+### 4. microRNA
+microRNA.NEW.Design.file.box<-c("designFile_baseline.csv")
+
+microRNA.NEW.norm.file.box<-c("normmiRNA_baseline.csv")
+### Join (Design+norm)
+
+
+##### 5. RNAseq
+# Bcells
+RNAseq.Bcell.file.box<-"CAV-Cohort-2-RNAseq_Bcell_data_20170224a.RData"
+
+# CD4 T cells
+RNAseq.CD4.file.box<-"CAV-Cohort-2-RNAseq_CD4_data_20170224a.RData"
+
+# CD8 T celle
+RNAseq.CD8.file.box<-"CAV-Cohort-2-RNAseq_CD8_data_20170224a.RData"
+
+# Monocytes
+RNAseq.Monocytes.file.box<-"CAV-Cohort-2-RNAseq_monocyte_data_20170224a.RData"
+
+# Wholeblood
+RNAseq.Wholeblood.file.box<-"CAV-Cohort-2-RNAseq-WholeBlood_data_20170516b.RData"
+
+
+###### 6. Treg
+Treg.all.file.box<-c("CAV-Cohort-2-Treg_data_20170425a")
+
+
+
+##### 7. Modules_RNAseq
+# Bcells
+RNAseq.Mod.Bcell.file.box<-"CAV-Cohort-2-RNAseq_Bcell_WGCNAModules_20170327a.RData"
+
+# CD4 T cells
+RNAseq.Mod.CD4.file.box<-"CAV-Cohort-2-RNAseq_CD4_WGCNAModules_20170327a.RData"
+
+# CD8 T celle
+RNAseq.Mod.CD8.file.box<-"CAV-Cohort-2-RNAseq_CD8_WGCNAModules_20170327a.RData"
+
+# Monocytes
+RNAseq.Mod.Monocytes.file.box<-"CAV-Cohort-2-RNAseq_monocyte_WGCNAModules_20170327a.RData"
+
+# Wholeblood
+RNAseq.Mod.Wholeblood.file.box<-"CAV-Cohort-2-RNAseq_WholeBlood_WGCNAModules_20170516b.RData"  # 5/16/17
+
+
+# 8. Modules: mRNA
+## 8.1 eigen values
+B.Affy.eigen.file.box<-"Affy_WGCNAeigenGenes_noMod0.csv"  # revised, 8/11
+
+
+## 8.2 sets (ignore set 0)
+B.Affy.module.set.file.box<-"moduleAssignment.csv"
+
 
 
 
 ##### 0. Cohort 2 pre-processing
-Active.Box.folder<-'c:/Users/dberel/Box Sync/'
-
-###################################################################################
-Design.file.box<-c('CAV Data Sharing/Cohort 2 Clinical and Demographic Data/C-peptide decline calculations - Skinner/data/CAV-Cohort-2_outcomes_parameters_20170727a.csv')
-###################################################################################
 
 Design.cohort2.all<-read.csv(paste(Active.Box.folder, Design.file.box, sep=''))
 Design.cohort2<-Design.cohort2.all %>% filter(cpeptide_visit_name %in% c('Baseline', 'Screening'))
@@ -66,18 +138,12 @@ rownames(Design.cohort2)<-Design.cohort2$participant_id
 
 
 #### 1. FACS/MFI
-###################################################################################
-FACS.design.file.box<-("CAV Data Sharing/FACS Immunophenotyping - Long/Cohort 2/FACS_designFile_baseline.csv")
-###################################################################################
 FACS.design<-read.csv(paste(Active.Box.folder, FACS.design.file.box, sep=''))
 ## fix barcode id
 FACS.design$cpeptide_visit_id<-ifelse(str_sub(FACS.design$cpeptide_visit_id, -2, -1)=='-1',
                                       str_sub(FACS.design$cpeptide_visit_id, -100, -4),
                                       str_sub(FACS.design$cpeptide_visit_id, -100, -3))
 
-###################################################################################
-FACS.raw.file.box<-("CAV Data Sharing/FACS Immunophenotyping - Long/Cohort 2/CAVII_shorten_v2.csv")
-###################################################################################
 FACS.raw<-read.csv(paste(Active.Box.folder, FACS.raw.file.box, sep=''))
 FACS.join<-inner_join(x=FACS.design, y=FACS.raw, by='Barcode')
 rownames(FACS.join)<-FACS.join$cpeptide_visit_id
@@ -94,9 +160,9 @@ for(i in 1:ncol(FACS.join)){
 
 
 ##### 2. mRNA
-###################################################################################
-mRNA.design.file.box<-("CAV Data Sharing/Affy arrays from serum exposure expt - Hessner/Cohort 2/DataForShinyApp/designAtBaseline.csv")
-###################################################################################
+## for raw data processing at earlier step, see folder GEO/mRNA/
+'Affy_cohort2_030817.RMD'
+
 mRNA.design<-read.csv(paste(Active.Box.folder, mRNA.design.file.box, sep=''))
 mRNA.design$barcode<-gsub('-', '.' ,mRNA.design$barcode)
 
@@ -106,9 +172,6 @@ mRNA.design$barcode<-gsub('-', '.' ,mRNA.design$barcode)
 ## keep only baseline measures (do same at raw data next)
 ##  no longer need. Elizabeth updated the raw file. mRNA.design<-mRNA.design %>% filter(month==0) %>% filter(barcode!='921893.H06') # exception for ABATE_002008, keep.H05
 
-###################################################################################
-mRNA.data_filt.file.box<-"CAV Data Sharing/Affy arrays from serum exposure expt - Hessner/Cohort 2/DataForShinyApp/filteredAffymetrixData_RemovedDateSent.csv"
-###################################################################################
 mRNA.data_filt<-read.csv(paste(Active.Box.folder, mRNA.data_filt.file.box, sep=''))
 # mRNA.data_filt %<>% dplyr::rename(X911285.H02 = X911285H02)
 Probe.id<-mRNA.data_filt$X
@@ -130,9 +193,6 @@ mRNA.join<-mRNA.join[,19:21186]
 
 
 ###  3. Pro.Insulin
-###################################################################################
-Pro.Insulin.all.file.box<-c("CAV Data Sharing/Proinsulin C Peptide Ratio - Gorus/Cohort 2/PIC_baseline.csv")
-###################################################################################
 Pro.Insulin.all<-read.csv(paste(Active.Box.folder, Pro.Insulin.all.file.box, sep=''))
 Pro.Insulin.all<-Pro.Insulin.all %>% dplyr::rename(participant_id_orig=participant_id, participant_id=cpeptide_visit_id)
 rownames(Pro.Insulin.all)<-Pro.Insulin.all$participant_id
@@ -153,12 +213,8 @@ for(i in 1:ncol(Pro.Insulin.all)){
 
 ### 4. microRNA
 # Though did not end up used in down-selection analysis
-###################################################################################
-microRNA.NEW.Design.file.box<-c("CAV Data Sharing/miRNA by Exiqon - Pugliese/Cohort 2/designFile_baseline.csv")
-###################################################################################
 microRNA.NEW.Design<-read.csv(paste(Active.Box.folder, microRNA.NEW.Design.file.box, sep=''))[,1:9]
 
-microRNA.NEW.norm.file.box<-c("CAV Data Sharing/miRNA by Exiqon - Pugliese/Cohort 2/normmiRNA_baseline.csv")
 microRNA.NEW.norm<-read.csv(paste(Active.Box.folder, microRNA.NEW.norm.file.box, sep=''))
 ### Join (Design+norm)
 microRNA.NEW.join<-inner_join(x=microRNA.NEW.Design %>% dplyr::rename(Key1=barcode),
@@ -178,22 +234,8 @@ microRNA.NEW.join[is.na(microRNA.NEW.join)]<-37 ### imput to 0, until better sol
 
 ##### 5. RNAseq
 
-###################################################################################
-# Bcells
-RNAseq.Bcell.file.box<-"CAV Data Sharing/Presentations and Analysis - Skinner/Data processing and filtering for Dror/CAV-Cohort-2-CellSubset_data/CAV-Cohort-2-RNAseq_Bcell_data_20170224a.RData"
-
-# CD4 T cells
-RNAseq.CD4.file.box<-"CAV Data Sharing/Presentations and Analysis - Skinner/Data processing and filtering for Dror/CAV-Cohort-2-CellSubset_data/CAV-Cohort-2-RNAseq_CD4_data_20170224a.RData"
-
-# CD8 T celle
-RNAseq.CD8.file.box<-"CAV Data Sharing/Presentations and Analysis - Skinner/Data processing and filtering for Dror/CAV-Cohort-2-CellSubset_data/CAV-Cohort-2-RNAseq_CD8_data_20170224a.RData"
-
-# Monocytes
-RNAseq.Monocytes.file.box<-"CAV Data Sharing/Presentations and Analysis - Skinner/Data processing and filtering for Dror/CAV-Cohort-2-CellSubset_data/CAV-Cohort-2-RNAseq_monocyte_data_20170224a.RData"
-
-# Wholeblood
-RNAseq.Wholeblood.file.box<-"CAV Data Sharing/Presentations and Analysis - Skinner/Data processing and filtering for Dror/CAV-Cohort-2-WholeBlood_data/CAV-Cohort-2-RNAseq-WholeBlood_data_20170516b.RData" # 5/16/17
-###################################################################################
+## for raw data processing at earlier step, see folder GEO/RNAseq WB/
+'CAV-Cohort-2-RNAseq-WholeBlood_1_QC_Analysis_20170516b_SOS.rmd'
 
 Cell.type.input.vec<-c('Bcell',     RNAseq.Bcell.file.box,
                        'CD4',       RNAseq.CD4.file.box,
@@ -210,7 +252,7 @@ RNA.seq.pre.process.function<-function(i, Cell.type.input.Matrix){
   cur.ENSG %>% dim
   cur.Genes<-cur.ENSG[,-c(1,2,4,5)] %>%
     group_by(symbol) %>%
-    summarise_each(funs(sum)) %>% ### !!! Sum, rather than mean
+    summarise_all(funs(sum)) %>% ### !!! Sum, rather than mean
     #filter(!is.na(symbol)) %>%
     data.frame %>%
     column_to_rownames('symbol')
@@ -235,9 +277,6 @@ RNAseq.list<-list(B.5.a.gene, B.5.b.gene, B.5.c.gene, B.5.d.gene, B.5.e.gene)
 
 
 ###### 6. Treg
-###################################################################################
-Treg.all.file.box<-c("CAV Data Sharing/Presentations and Analysis - Skinner/Data processing and filtering for Dror/CAV-Cohort-2-Treg_Nanostring_signature/CAV-Cohort-2-Treg_data_20170425a")
-###################################################################################
 load(paste(Active.Box.folder, Treg.all.file.box, sep=''))
 Treg.raw<-data.frame(t(dat[[2]]))
 Treg.raw<-Treg.raw[,-17]
@@ -249,22 +288,6 @@ Treg.raw<-Treg.raw[,-17]
 
 ##### 7. Modules_RNAseq
 
-###################################################################################
-# Bcells
-RNAseq.Mod.Bcell.file.box<-"CAV Data Sharing/Presentations and Analysis - Skinner/Data processing and filtering for Dror/CAV-Cohort-2-CellSubset_data/CAV-Cohort-2-RNAseq_Bcell_WGCNAModules_20170327a.RData"
-
-# CD4 T cells
-RNAseq.Mod.CD4.file.box<-"CAV Data Sharing/Presentations and Analysis - Skinner/Data processing and filtering for Dror/CAV-Cohort-2-CellSubset_data/CAV-Cohort-2-RNAseq_CD4_WGCNAModules_20170327a.RData"
-
-# CD8 T celle
-RNAseq.Mod.CD8.file.box<-"CAV Data Sharing/Presentations and Analysis - Skinner/Data processing and filtering for Dror/CAV-Cohort-2-CellSubset_data/CAV-Cohort-2-RNAseq_CD8_WGCNAModules_20170327a.RData"
-
-# Monocytes
-RNAseq.Mod.Monocytes.file.box<-"CAV Data Sharing/Presentations and Analysis - Skinner/Data processing and filtering for Dror/CAV-Cohort-2-CellSubset_data/CAV-Cohort-2-RNAseq_monocyte_WGCNAModules_20170327a.RData"
-
-# Wholeblood
-RNAseq.Mod.Wholeblood.file.box<-"CAV Data Sharing/Presentations and Analysis - Skinner/Data processing and filtering for Dror/CAV-Cohort-2-WholeBlood_data/CAV-Cohort-2-RNAseq_WholeBlood_WGCNAModules_20170516b.RData"  # 5/16/17
-###################################################################################
 
 ### extract BOTH MEs (pre-calculated eigen (average-like) intensities PER Module) and sets (modules)
 Cell.type.input.vec<-c('Bcell',     RNAseq.Mod.Bcell.file.box,
@@ -322,9 +345,6 @@ RNAseq.Mod.member.list<-list(M.RNAseq.cell      =RNA.seq.Mod.pre.process.functio
 # 8. Modules: mRNA
 
 ## 8.1 eigen values
-###################################################################################
-B.Affy.eigen.file.box<-"CAV Data Sharing/Affy arrays from serum exposure expt - Hessner/Cohort 2/WGCNA/Affy_WGCNAeigenGenes_noMod0.csv"  # revised, 8/11
-###################################################################################
 B.Affy.eigen<-read.csv(paste(Active.Box.folder, B.Affy.eigen.file.box, sep='')) %>%
   dplyr::rename(barcode=X)
 B.Affy.eigen$barcode<-as.character(B.Affy.eigen$barcode) %>%
@@ -336,9 +356,6 @@ B.Affy.eigen.join<-left_join(x=B.Affy.eigen , y=mRNA.design , by='barcode') %>%
 
 
 ## 8.2 sets (ignore set 0)
-###################################################################################
-B.Affy.module.set.file.box<-"CAV Data Sharing/Affy arrays from serum exposure expt - Hessner/Cohort 2/WGCNA/moduleAssignment.csv"
-###################################################################################
 B.Affy.module.set.long<-read.csv(paste(Active.Box.folder, B.Affy.module.set.file.box, sep=''))
 B.Affy.module.set.long<-B.Affy.module.set.long #%>% mutate(XaffyID=make.names(affyID)) ## add X, for later on, when feature names can't begin with number
 
@@ -450,16 +467,26 @@ mlr.Data<-data.frame(Y.raw, DF.long.scaled, check.names=TRUE)  ## require condit
 if( !is.null(Covariates.scaled) ){
   mlr.Data<-data.frame(Y.raw, DF.long.scaled, Covariates.scaled, check.names=TRUE)  ## require conditional if for 0 covariates!
 }
-task<-makeRegrTask(data=mlr.Data, target=colnames(Y.raw)) # with covariates!
-task
-# data_task<-task # over-ride for testing purposes
-# task %>% getTaskFeatureNames %>% substr(1, 8) %>% table()
+task_box<-makeRegrTask(data=mlr.Data, target=colnames(Y.raw)) # with covariates!
+task_box # scaled!!!
+
+# task_scaled<-task_box # over-ride for testing purposes
+# task_scaled %>% getTaskFeatureNames %>% substr(1, 8) %>% table()
 
 # library(Bioc2mlr)
 # task_Bioc2mlr<-Fun_SE_to_taskFunc(Join_SumEset.C2.complete.Y, param.Y.name, param.covariates,
 #                                  param_positive_y_level, task_return_format, task_type)
 
+# Box<-task_box %>% getTaskData()
+# Box$FACS.ZZZ.MFI_CD127_Naive_CD8
+# Box$cpep_model_decayrate
+# Box$Covariate_age_years
 
+
+# vign<-task_scaled %>% getTaskData()
+# vign$FACS.ZZZ.MFI_CD127_Naive_CD8
+# vign$cpep_model_decayrate
+# vign$Covariate_age_years
 
 ```
 

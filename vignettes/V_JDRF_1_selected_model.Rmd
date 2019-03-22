@@ -49,6 +49,8 @@ Model diagnostics
 # 1. Load raw data sets
 ```{r load}
 data_task # mlr's task format. currently non-functional, so require sep
+# Covariates must have the prefic name 'Covariate_xxx' so they are NOT included in the univariate filtering step, and will automatically added for the final LASSO model.
+
 JDRF_modules_sets_tibble # modules lists 
 
 modules_sets_combined_l<-Fun_Load_module_sets(JDRF_modules_sets_tibble) ## gene <-> module/pathway/set annotations
@@ -99,7 +101,12 @@ lrn_1<-Func_update_args_univ_clusters(lrn = lrn_PreProcess_glmnet, args_vec = ar
 
 ## 3.1 Scaling 
 ```{r scaling}
+
 task_scaled<-data_task %>>% cpoScale()
+## If raw data is processed with either BOX files, or GEO files, use 'V_JDRF_0_raw_data_pre_process.RMD' file to re-create the 'task' data, but keep in mind that data is ALREADY scaled!
+
+# task_scaled<-task_box
+
 ```
 
 
