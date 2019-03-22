@@ -14,6 +14,19 @@ knitr::opts_chunk$set(
 
 
 
+# JDRFCAV
+A feature selection method for vertical integrative analysis of multi-assay genomic data.  
+
+
+## Vision:
+```{r, echo = F}
+knitr::include_graphics("man/figures/Slide1.jpg")
+knitr::include_graphics("man/figures/Slide2.jpg")
+knitr::include_graphics("man/figures/Slide3.jpg")
+
+```
+
+
 ## Installation
 
 ```{r, eval = FALSE}
@@ -40,5 +53,8 @@ B. Biomarker discovery:
 
 # Customized Multi-assay feature selection
 C. (TBA) UnivCPO, UnivClustCPO (refactoring the above makePreprocWrapper() )
+
+
+
 
 
