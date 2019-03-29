@@ -61,18 +61,18 @@ Load the counts and metrics data for the project into R, along with sample annot
 
 ```{r load_data}
 # Read CSV file of flow cell with read counts
-countFile <- "GEO/RNAseq WB/MultiFlowcellProjects_combined_counts_merged.csv"
+countFile <- "data/MultiFlowcellProjects_combined_counts_merged.csv"
 countDat <- read_csv(countFile) # 64253 obs. of  499 variables
 #dim(countDat)
 
 # Read CSV file of flow cell with RNAseq/alignment metrics
-metricFile <- "GEO/RNAseq WB/MultiFlowcellProjects_combined_metrics_merged.csv"
+metricFile <- "data/MultiFlowcellProjects_combined_metrics_merged.csv"
 metricDat <- read_csv(metricFile) # 498 obs. of  71 variables
 #dim(metricDat)
 
 
 # Read RData file of flow cell with Sample name
-load("GEO/RNAseq WB/Lim_data_trimmed_2015-12-31.RData")
+load("../CAV-Cohort-2-RNAseq-CellSubsets/data/Participant_Data_TrialShare/Lim_data_trimmed_2015-12-31.RData")
 master <- master[!is.na(master$libID),]
 master[master$Study=="AbATE",]$Study <- "ABATE"
 master <- master[master$Study %in% c("START","T1DAL","ABATE"),]
@@ -81,7 +81,7 @@ designDat <- designDat %>% select(-c(`2hrAUC`, Baseline, Diff, Percent, Responde
 
 
 # Load in T1DAL unmasking csv and add participant_ids to designDat
-unmaskFile <- "GEO/RNAseq WB/T1DAL_unmask.csv"
+unmaskFile <- "data/T1DAL_unmask.csv"
 unmaskDat  <- read_csv(unmaskFile)
 unmaskDat <- unmaskDat[order(unmaskDat$Masked_ID),]
 unmaskDat <- unmaskDat[unmaskDat$Masked_ID %in% designDat$PatientID,]
@@ -95,7 +95,7 @@ designDat <- designDat[order(designDat$Study),]
 
 
 # Add in the investigator ID to the T1DAL patientID's
-demoDat <- read_excel("GEO/RNAseq WB/20170110 ITN clinical and demographic.xlsx")
+demoDat <- read_excel("../CAV-Cohort-2-DemographicData/data/20170110 ITN clinical and demographic.xlsx")
 demoDat <- demoDat %>% select(`Participant ID`, ID, `Investigator ID`)
 demoDat$Study <- unlist(lapply(demoDat$`Participant ID`, function(x) {strsplit(x, "_")[[1]][[1]]}))
 demoDat <- demoDat[!duplicated(demoDat$`Participant ID`),]
@@ -116,7 +116,7 @@ designDat <- designDat[order(designDat$libID),]
 
 
 # Read CSV file with highly variable genes from Cohort 0
-genebcvFile <- "GEO/RNAseq WB/CAV-Cohort-0-RNAseq-WholeBlood-HighCVAnalytes_20170124b.csv"
+genebcvFile <- "../CAV-Cohort-0-RNAseq-WholeBlood/data/CAV-Cohort-0-RNAseq-WholeBlood-HighCVAnalytes_20170124b.csv"
 genebcvDat <- read_csv(genebcvFile) # 2704 obs. of 7 variables
 #dim(genebcvDat)
 

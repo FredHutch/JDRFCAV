@@ -160,8 +160,7 @@ for(i in 1:ncol(FACS.join)){
 
 
 ##### 2. mRNA
-## for raw data processing at earlier step, see folder GEO/mRNA/
-'Affy_cohort2_030817.RMD'
+## QC: for raw data processing at earlier step, see folder /GEO/mRNA/Affy_cohort2_030817.RMD
 
 mRNA.design<-read.csv(paste(Active.Box.folder, mRNA.design.file.box, sep=''))
 mRNA.design$barcode<-gsub('-', '.' ,mRNA.design$barcode)
@@ -234,8 +233,9 @@ microRNA.NEW.join[is.na(microRNA.NEW.join)]<-37 ### imput to 0, until better sol
 
 ##### 5. RNAseq
 
-## for raw data processing at earlier step, see folder GEO/RNAseq WB/
-'CAV-Cohort-2-RNAseq-WholeBlood_1_QC_Analysis_20170516b_SOS.rmd'
+## QC: for raw data processing at earlier steps, see folders:
+## 1. /GEO/RNAseq WB/CAV-Cohort-2-RNAseq-WholeBlood_1_QC_Analysis_20170516b_SOS.rmd
+## 2. /GEO/RNAseq cell sorted/...
 
 Cell.type.input.vec<-c('Bcell',     RNAseq.Bcell.file.box,
                        'CD4',       RNAseq.CD4.file.box,

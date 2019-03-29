@@ -14,11 +14,8 @@ knitr::opts_chunk$set(echo = TRUE)
 Density plots show data have been RMA normalized, but there are a few libraries that have different densities. These unusual density samples will appear as outliers in the PCA plot later.
 
 ```{r readData}
-
-Folder_location<-'GEO/mRNA/'
-
 # read in data
-expData<-read.csv(file = paste0(Folder_location, "CAV_IIandIII_All126wNormPla_PartekRMA_rawLog2Int_2016Dec09_forBRI.csv"), row.names=1)
+expData<-read.csv(file="/Users/ewhalen/Projects/CAV/2015 Mike Mason/Affy arrays Hessner lab/Cohort 2/CAV_IIandIII_All126wNormPla_PartekRMA_rawLog2Int_2016Dec09_forBRI.csv", row.names=1)
 dim(expData)
 # looks like log2 transformed
 range(expData)
@@ -57,7 +54,7 @@ Read in both the sample sent file as well as the c-peptide outcome information.
 
 ```{r readDesign}
 # now read in design file
-hessDesign<-read.csv(file=paste0(Folder_location, "20161122 Hessner ITN samples-ALL.csv"))
+hessDesign<-read.csv(file="/Users/ewhalen/Projects/CAV/2015 Mike Mason/Affy arrays Hessner lab/Cohort 2/20161122 Hessner ITN samples-ALL.csv")
 hessDesign<-hessDesign[,1:8]
 dim(hessDesign)
 table(hessDesign$date.sent)
@@ -65,7 +62,7 @@ hessDesign$date.sent<-as.factor(hessDesign$date.sent)
 
 hessDesign$cpeptide_visit_id<-paste(as.character(hessDesign$ITN_ID), as.character(hessDesign$visit_num), sep="_")
 
-outcomeData<-read.csv(file=paste0(Folder_location, "CAV-Cohort-2_outcomes_parameters_20170221a.csv"))
+outcomeData<-read.csv(file="/Users/ewhalen/Projects/CAV/2015 Mike Mason/Cohort 2 Data/C-peptide decline calculations - Skinner/data/CAV-Cohort-2_outcomes_parameters_20170221a.csv")
 
 sum(hessDesign$cpeptide_visit_id %in% outcomeData$cpeptide_visit_id)
 #hessDesign[which(!(hessDesign$cpeptide_visit_id %in% outcomeData$cpeptide_visit_id)),]
@@ -291,7 +288,7 @@ hessDesignSub0$hba1c<-outcomeDataSub0$hba1c
 # cohort 1 code includes cohort 0 replicate testing and it looks like the largest CV was 0.213 so no genes are excluded based on replicate testing
 
 # Marty's 2 lists
-geneLists<-read.csv(file=paste0(Folder_location,"1374 and 359 lists.csv"))
+geneLists<-read.csv(file="/Users/ewhalen/Projects/CAV/2015 Mike Mason/Affy arrays Hessner lab/1374 and 359 lists.csv")
 list1<-as.character(geneLists$Probeset.ID)[which(geneLists$II1374.4way.Venn.1.125.Fold.Filter.n_total..1374==1)]
 length(list1)	# 1374
 list2<-as.character(geneLists$Probeset.ID)[which(geneLists$II359.RF.ONEvs.Other3.on.12589n.Cxsect.Gini.n.359==1)]
@@ -305,8 +302,7 @@ all(list2 %in% rownames(expData0))
 library(genefilter)
 library(Biobase)
 # cohort 1 data (to make feature data dataframe for eSet object)
-affyData1<-read.csv(file=paste0(Folder_location, "Set65_CAVwROHC_PartekRMA_rawLog2Int_2016Feb12_wN35Anno.csv"))
- 
+affyData1<-read.csv(file="/Users/ewhalen/Projects/CAV/2015 Mike Mason/Affy arrays Hessner lab/Set65_CAVwROHC_PartekRMA_rawLog2Int_2016Feb12_wN35Anno.csv")
 # feature data from cohort 1
 featData<-affyData1[2:nrow(affyData1),1:8]
 all(as.character(featData[,1])==rownames(expData0))
@@ -320,12 +316,9 @@ fData<-AnnotatedDataFrame(featData)
 # hgu133ab
 affyEset<-ExpressionSet(assayData=as.matrix(expData0), phenoData=pData, featureData=fData, annotation="hgu133plus2")
 
-#################################################################################################
-#affyEsetFilter<-nsFilter(affyEset, remove.dupEntrez=FALSE, var.func=function(x) stats::IQR(x, type=1), var.cutoff=0.5)$eset
 affyEsetFilter<-nsFilter(affyEset, remove.dupEntrez=FALSE, var.func=IQR, var.cutoff=0.5)$eset
-
 dim(affyEsetFilter)	# now have 21,168 genes to look at
-#################################################################################################
+
 matchIndex1<-match(list1, rownames(exprs(affyEset)))
 sum(is.na(matchIndex1))
 matchIndex2<-match(list2, rownames(exprs(affyEset)))
@@ -609,14 +602,13 @@ affyEsetNoDateList2<-affyEsetNoDateList2[,-remIndex]
 hessDesignSub0r<-hessDesignSub0[-remIndex,]
 
 # write 4 sets out to file
-dim(affyEsetNoDateFilter)
-#write.csv(affyEsetNoDate, file="/Users/ewhalen/Projects/CAV/Results/Cohort2/Affy/fullAffymetrixData_RemovedDateSent.csv")
-write.csv(affyEsetNoDateFilter, file=paste0(Folder_location,"filteredAffymetrixData_RemovedDateSent.csv"))
-#write.csv(affyEsetNoDateList1, file="/Users/ewhalen/Projects/CAV/Results/Cohort2/Affy/list1AffymetrixData_RemovedDateSent.csv")
-#write.csv(affyEsetNoDateList2, file="/Users/ewhalen/Projects/CAV/Results/Cohort2/Affy/list2AffymetrixData_RemovedDateSent.csv")
+write.csv(affyEsetNoDate, file="/Users/ewhalen/Projects/CAV/Results/Cohort2/Affy/fullAffymetrixData_RemovedDateSent.csv")
+write.csv(affyEsetNoDateFilter, file="/Users/ewhalen/Projects/CAV/Results/Cohort2/Affy/filteredAffymetrixData_RemovedDateSent.csv")
+write.csv(affyEsetNoDateList1, file="/Users/ewhalen/Projects/CAV/Results/Cohort2/Affy/list1AffymetrixData_RemovedDateSent.csv")
+write.csv(affyEsetNoDateList2, file="/Users/ewhalen/Projects/CAV/Results/Cohort2/Affy/list2AffymetrixData_RemovedDateSent.csv")
 
 # write out design file
-write.csv(hessDesignSub0r, file=paste0(Folder_location,"designAtBaseline.csv"), row.names=FALSE)
+write.csv(hessDesignSub0r, file="/Users/ewhalen/Projects/CAV/Results/Cohort2/Affy/designAtBaseline.csv", row.names=FALSE)
 
 ```
 

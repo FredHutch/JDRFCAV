@@ -54,6 +54,10 @@ devtools::install_github("FredHutch/JDRFCAV")
 
 # Data curation 
 A. NCBI/GEO raw files -> processed data -> [MultiAssayExperiment](http://bioconductor.org/packages/release/bioc/html/MultiAssayExperiment.html) (MAE) -> mlr's [task](https://mlr.mlr-org.com/articles/tutorial/task.html) foramt
+```{r, echo = F}
+knitr::include_graphics("man/figures/JDRF data documentation.JPG")
+```
+
 
 # Paper's reproducible results
 B. Biomarker discovery:    
@@ -62,6 +66,7 @@ B. Biomarker discovery:
 
 # Customized Multi-assay feature selection
 C. (TBA) UnivCPO, UnivClustCPO (refactoring the above makePreprocWrapper() )
+
 
 
 

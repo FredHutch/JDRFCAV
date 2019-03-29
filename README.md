@@ -58,6 +58,7 @@ A. NCBI/GEO raw files -\> processed data -\>
 [MultiAssayExperiment](http://bioconductor.org/packages/release/bioc/html/MultiAssayExperiment.html)
 (MAE) -\> mlr’s
 [task](https://mlr.mlr-org.com/articles/tutorial/task.html) foramt
+![](man/figures/JDRF%20data%20documentation.JPG)<!-- -->
 
 # Paper’s reproducible results
 

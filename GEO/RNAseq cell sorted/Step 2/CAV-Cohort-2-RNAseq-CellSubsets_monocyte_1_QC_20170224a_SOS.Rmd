@@ -1,0 +1,353 @@
+---
+title: 'P133-1: CAV Cohort 2 RNAseq - Monocyte - QC verification'
+author: "Samuel O Skinner"
+date: "February 24, 2017"
+output:
+  html_document:
+    number_sections: yes
+---
+
+
+```{r global_opts, echo=FALSE, cache=FALSE}
+knitr::opts_chunk$set(fig.width=8, fig.height=4, fig.align='center',
+                      echo=TRUE, warning=FALSE, message=FALSE,
+                      cache=FALSE, autodep=TRUE)
+# knitr::opts_knit$set(root.dir = "..")
+
+## numbers >= 10^5 will be denoted in scientific notation,
+## and rounded to 2 digits
+options(scipen = 1, digits = 2)
+```
+
+
+# Summary
+
+
+----- 
+\  
+# R environment set-up
+\  
+## Loading packages
+
+```{r load_packages, cache=FALSE}
+# Clean up the environment
+rm(list = ls())
+cleanup <- gc(verbose = FALSE)
+
+# Load libraries I'll need here
+library(dplyr)
+library(limma)
+library(edgeR)
+library(readr)
+library(readxl)
+library(ggplot2)
+library(cowplot)
+library(annotables)
+library(moments)
+library(rpart)
+library(reshape2)
+
+# Packages for R markdown stuff
+library(knitr)
+library(shiny)
+```
+
+
+\  
+
+## Loading data
+
+
+```{r load_data}
+# Read Rdata file that Matt Dufort had QC'd previously
+load("/Users/samskinner/Box Sync/Projects/CAV-Cohort-2-RNAseq-CellSubsets/DufortAnalysis/output/T1D_placebos_sorted_cells_data_for_analysis_2016-07-11.Rdata")
+
+# Rename files and clean up
+metriDat <- metrics.final
+annotDat <- sample_annotation.final
+countDat <- counts.final  
+rm(metrics.final, sample_annotation.final, counts.final, pcaAll.no_outliers)
+
+# Standardize libid names
+colnames(metriDat)[which(colnames(metriDat)=="lib_id")] <- "libid"
+colnames(annotDat)[which(colnames(annotDat)=="library_id")] <- "libid"
+
+# Scrape the gene names off one countDat and into geneDat, check to make sure the rows are the same
+geneDat <- data_frame(ensgene = rownames(countDat))
+
+# Read CSV file with highly variable genes from Cohort 0
+genecvFile <- "../CAV-Cohort-0-RNASeq-CellSubsets/data/CAV-Cohort-0-RNAseq-CellSubsets-monocyte-HighCVAnalytes_20170125a.csv"
+genecvDat <- read_csv(genecvFile) # 1462 obs. of 7 variables
+#dim(genebcvDat)
+
+
+# Load the clinical parameters, extract the time of draw
+demoDat <- read_excel("data/20170110 ITN clinical and demographic.xlsx")
+demoSub <- demoDat %>% select(`Participant ID`, 
+                              Visit,
+                              `collection time`)
+
+demoSub <- demoSub[which(demoSub$Visit>=0),]
+demoSub$Visit[demoSub$Visit==1] <- 0
+demoSub$visit_id <- apply(demoSub, 1, function(x) {paste(x[1],x[2],sep = "_")})
+ToDSub <- demoSub %>% select(visit_id, `collection time`)
+
+annotDat <- left_join(annotDat, ToDSub, by="visit_id")
+
+
+```
+
+\  
+
+# General QC
+
+```{r inspect_data}
+
+# Make summary data structure
+metriSum <- metriDat %>%
+  mutate(percent_duplication = unpaired_read_duplicates / unpaired_reads_examined) %>%
+  mutate(percent_aligned_w_dups = unpaired_reads_examined / fastq_total_reads) %>% 
+  select(libid, median_cv_coverage, fastq_total_reads, percent_aligned_w_dups, percent_duplication)
+
+```
+\  
+
+## Inspection of various quality metrics and distributions
+
+\  
+
+### Inspect the number of total FASTQ reads
+```{r plot_metric_1, echo=FALSE}
+
+barplot(sort(metriSum$fastq_total_reads)/1E6,
+        xlab="Libraries",
+        ylab="Total FASTQ Reads (millions)",
+        main = "Total FASTQ Reads")
+abline(h=1)
+
+```
+
+\  
+
+### Inspect library median CV and percent aligned
+```{r plot_metric_2, echo=FALSE}
+
+plot(x=metriSum$median_cv_coverage, 
+     y=metriSum$percent_aligned_w_dups, 
+     xlab="Median CV coverage", 
+     ylab="Percent Aligned",
+     xlim=c(0,1),
+     ylim=c(0.6,1),
+     main="Percent Aligned vs. Median CV Coverage")
+abline(h=0.8)
+abline(v=1.0)
+#rect(0,0.8,1,1,col=rgb(0.5,0.5,0.5,1/4), border=NA)
+
+```
+
+
+\  
+
+## Gene filtering and inspection of resulting count and cpm distributions
+
+\  
+
+### Setup dge structure and annotate genes
+```{r gene_annotation}
+
+# Set up annotation list
+ens2Gene <- grch38 %>% select(ensgene, entrez, symbol, biotype, chr)
+
+# Remove duplicates from multiple entrez entries per ensgene entries
+ens2Gene <- ens2Gene[!duplicated(ens2Gene$ensgene),]
+
+# Join with geneDat
+geneDat <- geneDat %>% merge(ens2Gene, by="ensgene", all.x = TRUE)
+
+# Set up DGEList
+dge <- DGEList(counts = countDat, genes = geneDat)
+
+
+```
+
+\  
+
+
+### Filter genes
+
+```{r gene_filtering}
+
+# Current size
+dim(dge)
+
+# Select down to the baseline timepoint
+curDGE <- dge[,annotDat$visit_number==0]
+annotDat <- annotDat[annotDat$visit_number==0,]
+dim(curDGE)
+
+# Select only the cell subset of interest
+curDGE <- curDGE[,annotDat$cell_type=="monocyte"]
+annotDat <- annotDat[annotDat$cell_type=="monocyte",]
+dim(curDGE)
+
+# Keep all genes that have at least 1 count per million in at least 20% of libraries
+keepRows <- rowSums(cpm(curDGE$counts) >= 1) >= 0.2*ncol(curDGE$counts)
+curDGE <- curDGE[keepRows, ]
+dim(curDGE)
+
+# Discard all genes that are highly variable
+discardrows <- which(curDGE$genes$ensgene %in% genecvDat$ensgene)
+curDGE <- curDGE[-discardrows,]
+dim(curDGE)
+
+# Use only the protein-coding genes
+i_pc  <- which(curDGE$genes$biotype == "protein_coding")
+curDGE <- curDGE[i_pc,]
+dim(curDGE)
+
+# Adjust the size of the other data frames
+countDat <- countDat[keepRows,]
+geneDat  <- geneDat[keepRows,]
+
+# reset library sizes
+curDGE$samples$lib.size <- colSums(curDGE$counts)
+
+# calculate normalization factors (effective library size = lib.size * norm.factor)
+curDGE <- calcNormFactors(curDGE)
+
+# Voom transformation
+curDGE <- voom(curDGE)
+
+
+```
+
+
+
+# Basic analysis
+
+\  
+
+## Principal component analysis (PCA)
+Performing the PCA calculation on log counts. 
+```{r initial_pca}
+
+# Compute principal components
+pca_log <- prcomp(t(curDGE$E))
+
+pca_log$x <- as.data.frame(pca_log$x)
+
+```
+
+
+The relative variance explained by each PC.
+```{r display_PC_std}
+
+percVariance <- pca_log$sdev^2 / sum(pca_log$sdev^2)
+
+pc_df <- data_frame(pc = 1:length(pca_log$sdev), 
+                    percVariance)
+
+ggplot(pc_df[1:6,], aes(x=pc, y=percVariance)) + 
+  geom_bar(stat="identity") + 
+  labs(x="Principal component",
+       y="Percent variance")
+
+```
+
+
+
+
+
+
+
+
+The first four PC's against each other.
+```{r plot_initial_pca_batch_study, echo=FALSE}
+
+
+
+Study <- annotDat$study
+
+
+plot1.2 <- ggplot(pca_log$x, 
+                  aes(x=PC1,
+                      y=PC2,
+                      colour=Study)) + 
+  geom_point() +
+  theme(legend.position="none",
+        text = element_text(size=10),
+        axis.text = element_text(size=8))
+
+plot1.3 <- ggplot(pca_log$x, 
+                  aes(x=PC1,
+                      y=PC3,
+                      color=Study)) + 
+  geom_point() +
+  theme(legend.position="none",
+        text = element_text(size=10),
+        axis.text = element_text(size=8))
+
+plot1.4 <- ggplot(pca_log$x, 
+                  aes(x=PC1,
+                      y=PC4,
+                      color=Study)) + 
+  geom_point() +
+  theme(legend.position="none",
+        text = element_text(size=10),
+        axis.text = element_text(size=8))
+
+plot2.3 <- ggplot(pca_log$x, 
+                  aes(x=PC2,
+                      y=PC3,
+                      color=Study)) + 
+  geom_point() +
+  theme(legend.position="none",
+        text = element_text(size=10),
+        axis.text = element_text(size=8))
+
+plot2.4 <- ggplot(pca_log$x, 
+                  aes(x=PC2,
+                      y=PC4,
+                      color=Study)) + 
+  geom_point() +
+  theme(legend.position="none",
+        text = element_text(size=10),
+        axis.text = element_text(size=8))
+
+plot3.4 <- ggplot(pca_log$x, 
+                  aes(x=PC3,
+                      y=PC4,
+                      color=Study)) + 
+  geom_point() +
+  theme(legend.position="none",
+        text = element_text(size=10),
+        axis.text = element_text(size=8))
+
+
+
+grobs <- ggplotGrob(plot1.2 + theme(legend.position="top"))$grobs
+legend_b <- grobs[[which(sapply(grobs, function(x) x$name) == "guide-box")]]
+
+prow <- plot_grid(plot1.2, plot1.3, plot1.4, 
+                  plot2.3, plot2.4, plot3.4,
+                  ncol=3)
+plot_grid(legend_b, prow, ncol=1, rel_heights=c(.1, 1))
+
+
+```
+
+
+
+
+
+
+
+# Write output to file
+```{r write_output_file}
+
+colnames(curDGE$E) <- annotDat$participant_id
+
+save(curDGE, file = "data/CAV-Cohort-2-RNAseq_monocyte_data_20170224a.RData")
+
+```
+
