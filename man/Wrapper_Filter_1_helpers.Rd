@@ -53,5 +53,5 @@ Helper functions
 TBA
 
 when cv.glmnet lambda.min return a null model (intercept only), alternatively return 'previous'
-value of lambda that reults \code {param.LASSO.n.features.arbitrary} features
+value of lambda that reults param.LASSO.n.features.arbitrary features
 }

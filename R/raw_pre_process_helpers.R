@@ -47,7 +47,7 @@ store_All_list_into_MAE<-function(All.list.raw.only, pData.in){
   ## 3. sampleMap
   # listmap1<-data.frame(primary=rownames(All.list.raw.only[[1]]), assay=names(All.list.raw.only[[1]])
   # listmap.i<-map2(.x=All.list.raw.only, .y=All.list.raw.design.only, function(x,y) data.frame(primary=rownames(x), assay=rownames(y) ) )
-  listmap.i<-All.list.raw.only %>% map(function(x) data.frame(primary=rownames(x), assay=rownames(x) ) )
+  listmap.i<-All.list.raw.only %>% map(function(x) data.frame(primary=rownames(x), colname=rownames(x) ) )
   # names(listmap.i) is automatically inherited from the All.list.raw.only (list)
   mySampleMap<-listToMap(listmap.i)
 

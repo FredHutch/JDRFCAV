@@ -25,7 +25,7 @@ library(SummarizedExperiment)
 library(MultiAssayExperiment)
 library(mlr)
 
-library(JDRFCAV)
+library(JDRFCAV) #install.packages("/../JDRFCAV", repos = NULL, type = "source")
 
 
 
