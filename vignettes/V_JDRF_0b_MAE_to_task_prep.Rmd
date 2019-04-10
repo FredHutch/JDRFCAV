@@ -15,27 +15,58 @@ vignette: >
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 
-library(tidyverse); select<-dplyr::select
+library(tidyverse)
 library(magrittr)
-
-
 library(mlr)
 library(mlrCPO)
 library(MultiAssayExperiment)
+library(biobroom)
+library(limma)
+library(impute)
+library(glmnet)
+
 
 library(JDRFCAV)
 
 
 ```
 
+Demonstration on how to reformat multi-assay data from Bioconductor's MultiAssayExperiment S4 class, into mlr's task format.  
 
-Raw data Loading   
+Main conditions:  
+1. complete cases across all assays.  
+2. covariates column names must begin with 'Covariate_xxx'.  
+3. categorical covariates must be converted to numeric format.   
+4. dependent variable (target) can't have missing values.  
 
 ```{r toy_data}
-miniACC
+miniACC # toy data from MultiAssayExperiment package
+miniACC<-miniACC[, complete.cases(miniACC), ! names(miniACC) %in% c('Mutations')] # keep only overlap complete cases across all assays
 
-miniACC %>% experiments %>% as.list %>% map(~assay(.x)[1:3, 1:4])
-names(miniACC)
+# miniACC %>% experiments %>% as.list %>% map(~assay(.x)[1:3, 1:4])
+assay_df_wide<-miniACC %>% wideFormat %>% data.frame
+
+Assay.Analyte.sep<-'.ZZZ.'
+colnames(assay_df_wide) %<>% str_replace('_', Assay.Analyte.sep)
+# assay_df_wide %>% names %>% tail
+
+
+# Covariates:
+covariates_df<-colData(miniACC)[,c('gender','years_to_birth')] %>% data.frame %>% as_tibble
+covariates_df %<>% mutate_if(is.character, ~as.factor(.x) %>% as.numeric)
+colnames(covariates_df) %<>% paste('Covariate', ., sep="_") 
+
+# Y / outcome / target
+target<-'ADS'
+Y_df<-data.frame(colData(miniACC)[,target]) %>% set_colnames(target)
+
+# mlr's task format
+task_example<-makeRegrTask(id = 'example', data = data.frame(Y_df, covariates_df, assay_df_wide %>% select(-primary)), target = target)
+task_example$task.desc$has.missings<-TRUE
+task_scaled<-task_example %>>% cpoScale()
+
+
+param.assay.type.vec<-c('Short', 'Long', 'Short', 'Short') # must be the same length as the number of assays!!!
 
 
 ```
@@ -43,9 +74,57 @@ names(miniACC)
 
 
 
+```{r}
+## Code similar to the one at V_JDRF_1_selected_model.RMD, but with some changes to fit the above toy data
+lrn.glmnet.1.orig<-makeLearner(cl= "regr.cvglmnet", par.vals = list(alpha=1, s='lambda.min') ) 
+lrn_PreProcess_glmnet<-Fun_lrn_univ_Clusters_All_makePrep_MaG(lrn.glmnet.1.orig,
+  train_F                        = F_PreProc_3_UnivClust_Train_MaG, # pre-definced wrapper-function: train
+  Predict_F                      = F_PreProc13_BOTH_Predict_MaG,  # pre-definced wrapper-function: predict
+  param.Univ.filt.top.n.features = NA, 
+  param.UnivClustRankTopN        = NA, 
+  param.cluster_method_KH        = NA, 
+  param.corrplot.n.clusters.k    = NA, 
+  param.corrplot.n.clusters.h    = NA, 
+  parame.gene.or.module          = NA,
+  param.LASSO.n.features.arbitrary=NA)
+
+## params currently NOT in learner, since they are not tuned/benchmarked
+Assay.Analyte.sep<-'.ZZZ.'
+is.numeric(param.impute.knn.k<-20) 
+
+lrn_PreProcess_glmnet$par.vals[['param.assay.type.vec']]<-param.assay.type.vec
+
+lrn_PreProcess_glmnet$next.learner$properties %<>% c(., 'missings') # ok to add only because pre-rprocessing will make sure all NAs are imputed
+
+## arguments for the pre-processing wrapper
+args_1<-list(
+  param.Univ.filt.top.n.features   = 30, 
+  param.UnivClustRankTopN          = 1, 
+  param.cluster_method_KH          = 'method.h', 
+  param.corrplot.n.clusters.k      = 10,  
+  param.corrplot.n.clusters.h      = 0.3, 
+  parame.gene.or.module            = 'gene', 
+  param.LASSO.n.features.arbitrary = 5)
+
+lrn_1<-Func_update_args_univ_clusters(lrn = lrn_PreProcess_glmnet, args_vec = args_1, lrn.id = 'lrn1')    
+
+data_to_bake  <-task_scaled %>% getTaskData()
+target_to_bake<-task_scaled %>% getTaskTargetNames()
+
+## bake UnivClust:
+baked_UnivClust<-F_PreProc_3_UnivClust_Train_MaG(data_to_bake, target_to_bake, args = lrn_1$par.vals) # ok to do with F_PreProc_3_UnivClust_Train_MaG() since no further ML is done
+task_baked_UnivClust<-makeRegrTask(id = "baked_passed_univ", data = baked_UnivClust$data, target = target)
+Baked_x<-baked_UnivClust$data %>% select(-target) %>% as.matrix
+Baked_y<-baked_UnivClust$data %>% pull(target)
+fit_baked<-cv.glmnet(Baked_x, Baked_y, alpha = 1)
+
+coef(fit_baked, s = 0.00009) %>% tidy # 19 withOUT OSBP2. paper
 
 
-# 7. Session information
+```
+
+
+
 ```{r }
 sessionInfo()
 ```
