@@ -50,6 +50,7 @@ Model diagnostics
 ```{r load}
 data_task # mlr's task format. currently non-functional, so require sep
 # Covariates must have the prefic name 'Covariate_xxx' so they are NOT included in the univariate filtering step, and will automatically added for the final LASSO model.
+# Also note, that this file has more mRNA probes than the one in the GEO / BOX raw files, due to early annotation file that was used, HOWEVER, these probes does not affect the results shown in the paper.
 
 JDRF_modules_sets_tibble # modules lists 
 
@@ -102,7 +103,7 @@ lrn_1<-Func_update_args_univ_clusters(lrn = lrn_PreProcess_glmnet, args_vec = ar
 ## 3.1 Scaling 
 ```{r scaling}
 
-task_scaled<-data_task %>>% cpoScale()
+task_scaled<-data_task %>>% cpoScale() ### Skip if created from QC / GEO
 ## If raw data is processed with either BOX files, or GEO files, use 'V_JDRF_0_raw_data_pre_process.RMD' file to re-create the 'task' data, but keep in mind that data is ALREADY scaled!
 
 # task_scaled<-task_box

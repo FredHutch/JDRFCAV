@@ -45,11 +45,11 @@ FACS.raw.file.box<-("CAVII_shorten_v2.csv")
 
 
 ##### 2. mRNA
-mRNA.design.file.box<-("designAtBaseline.csv")
-mRNA.design.file.box<-("REP/designAtBaseline_JMK20190409.csv")
+#mRNA.design.file.box<-("designAtBaseline.csv")
+mRNA.design.file.box<-("designAtBaseline_JMK20190409.csv")
 
-mRNA.data_filt.file.box<-"filteredAffymetrixData_RemovedDateSent.csv"
-mRNA.data_filt.file.box<-"REP/filteredAffymetrixData_RemovedDateSent_JMK20190409.csv"
+#mRNA.data_filt.file.box<-"filteredAffymetrixData_RemovedDateSent.csv"
+mRNA.data_filt.file.box<-"filteredAffymetrixData_RemovedDateSent_JMK20190409.csv"
 
 
 
@@ -66,24 +66,24 @@ microRNA.NEW.norm.file.box<-c("normmiRNA_baseline.csv")
 
 ##### 5. RNAseq
 # Bcells
-RNAseq.Bcell.file.box<-"CAV-Cohort-2-RNAseq_Bcell_data_20170224a.RData"
-# RNAseq.Bcell.file.box<-"REP/CAV-Cohort-2-RNAseq_Bcell_data_20170224a_JMK20190409.RData"
+#RNAseq.Bcell.file.box<-"CAV-Cohort-2-RNAseq_Bcell_data_20170224a.RData"
+RNAseq.Bcell.file.box<-"CAV-Cohort-2-RNAseq_Bcell_data_20170224a_JMK20190410.RData"
 
 # CD4 T cells
-RNAseq.CD4.file.box<-"CAV-Cohort-2-RNAseq_CD4_data_20170224a.RData"
-# RNAseq.CD4.file.box<-"REP/CAV-Cohort-2-RNAseq_CD4_data_20170224a_JMK20190409.RData"
+#RNAseq.CD4.file.box<-"CAV-Cohort-2-RNAseq_CD4_data_20170224a.RData"
+RNAseq.CD4.file.box<-"CAV-Cohort-2-RNAseq_CD4_data_20170224a_JMK20190410.RData"
 
 # CD8 T celle
-RNAseq.CD8.file.box<-"CAV-Cohort-2-RNAseq_CD8_data_20170224a.RData"
-# RNAseq.CD8.file.box<-"REP/CAV-Cohort-2-RNAseq_CD8_data_20170224a_JMK20190409.RData"
+#RNAseq.CD8.file.box<-"CAV-Cohort-2-RNAseq_CD8_data_20170224a.RData"
+RNAseq.CD8.file.box<-"CAV-Cohort-2-RNAseq_CD8_data_20170224a_JMK20190410.RData"
 
 # Monocytes
-RNAseq.Monocytes.file.box<-"CAV-Cohort-2-RNAseq_monocyte_data_20170224a.RData"
-# RNAseq.Monocytes.file.box<-"REP/CAV-Cohort-2-RNAseq_monocyte_data_20170224a_JMK20190409.RData"
+#RNAseq.Monocytes.file.box<-"CAV-Cohort-2-RNAseq_monocyte_data_20170224a.RData"
+RNAseq.Monocytes.file.box<-"CAV-Cohort-2-RNAseq_monocyte_data_20170224a_JMK20190410.RData"
 
 # Wholeblood
-RNAseq.Wholeblood.file.box<-"CAV-Cohort-2-RNAseq-WholeBlood_data_20170516b.RData"
-# RNAseq.Wholeblood.file.box<-"REP/CAV-Cohort-2-RNAseq-WholeBlood_data_20170516b_JMK20190409.RData"
+#RNAseq.Wholeblood.file.box<-"CAV-Cohort-2-RNAseq-WholeBlood_data_20170516b.RData"
+RNAseq.Wholeblood.file.box<-"CAV-Cohort-2-RNAseq-WholeBlood_data_20170516b_JMK20190410.RData"
 
 
 ###### 6. Treg
@@ -457,7 +457,7 @@ metadata.raw.table<-tibble(Assay=names(MultiAssay.cohort.2),
 Setup.returned.list<-Setup.plue.MAE.to.vertical.function(MultiAssay.cohort.2, param.Y.name, param.assays.vector, param.subjects.study, param.cohort, param.covariates, param.rv144.mRNA.collapse.multiple.probes, parame.gene.or.module, param.Selected.Meta.sets, Assay.Analyte.sep)
 
 
-
+# Setup.returned.list$DF.long.scaled[1:3, 100:104]
 
 
 
