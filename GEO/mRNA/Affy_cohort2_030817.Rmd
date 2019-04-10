@@ -16,6 +16,11 @@ Density plots show data have been RMA normalized, but there are a few libraries 
 ```{r readData}
 # read in data
 expData<-read.csv(file="/Users/ewhalen/Projects/CAV/2015 Mike Mason/Affy arrays Hessner lab/Cohort 2/CAV_IIandIII_All126wNormPla_PartekRMA_rawLog2Int_2016Dec09_forBRI.csv", row.names=1)
+
+expData<-read.csv(file="GEO/mRNA/CAV_IIandIII_All126wNormPla_PartekRMA_rawLog2Int_2016Dec09_forBRI.csv",
+      row.names=1)
+
+
 dim(expData)
 # looks like log2 transformed
 range(expData)

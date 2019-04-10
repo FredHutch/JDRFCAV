@@ -46,8 +46,11 @@ FACS.raw.file.box<-("CAVII_shorten_v2.csv")
 
 ##### 2. mRNA
 mRNA.design.file.box<-("designAtBaseline.csv")
+mRNA.design.file.box<-("REP/designAtBaseline_JMK20190409.csv")
 
 mRNA.data_filt.file.box<-"filteredAffymetrixData_RemovedDateSent.csv"
+mRNA.data_filt.file.box<-"REP/filteredAffymetrixData_RemovedDateSent_JMK20190409.csv"
+
 
 
 ###  3. Pro.Insulin
@@ -64,18 +67,23 @@ microRNA.NEW.norm.file.box<-c("normmiRNA_baseline.csv")
 ##### 5. RNAseq
 # Bcells
 RNAseq.Bcell.file.box<-"CAV-Cohort-2-RNAseq_Bcell_data_20170224a.RData"
+# RNAseq.Bcell.file.box<-"REP/CAV-Cohort-2-RNAseq_Bcell_data_20170224a_JMK20190409.RData"
 
 # CD4 T cells
 RNAseq.CD4.file.box<-"CAV-Cohort-2-RNAseq_CD4_data_20170224a.RData"
+# RNAseq.CD4.file.box<-"REP/CAV-Cohort-2-RNAseq_CD4_data_20170224a_JMK20190409.RData"
 
 # CD8 T celle
 RNAseq.CD8.file.box<-"CAV-Cohort-2-RNAseq_CD8_data_20170224a.RData"
+# RNAseq.CD8.file.box<-"REP/CAV-Cohort-2-RNAseq_CD8_data_20170224a_JMK20190409.RData"
 
 # Monocytes
 RNAseq.Monocytes.file.box<-"CAV-Cohort-2-RNAseq_monocyte_data_20170224a.RData"
+# RNAseq.Monocytes.file.box<-"REP/CAV-Cohort-2-RNAseq_monocyte_data_20170224a_JMK20190409.RData"
 
 # Wholeblood
 RNAseq.Wholeblood.file.box<-"CAV-Cohort-2-RNAseq-WholeBlood_data_20170516b.RData"
+# RNAseq.Wholeblood.file.box<-"REP/CAV-Cohort-2-RNAseq-WholeBlood_data_20170516b_JMK20190409.RData"
 
 
 ###### 6. Treg
@@ -186,8 +194,7 @@ mRNA.data_filt.T$barcode<-substr(rownames(mRNA.data_filt.T),2, 100) # dim(mRNA.d
 mRNA.join<-inner_join(x=mRNA.design, y=mRNA.data_filt.T, by='barcode')
 mRNA.join<-mRNA.join %>% dplyr::rename(participant_id=ITN_ID)
 rownames(mRNA.join)<-mRNA.join$participant_id
-mRNA.join<-mRNA.join[,19:21186]
-
+mRNA.join<-mRNA.join[,(ncol(mRNA.design)+1):ncol(mRNA.join)]
 
 
 
@@ -446,6 +453,7 @@ is.character(param.subjects.study<-c('START','T1DAL','ABATE')[1:2])
 metadata.raw.table<-tibble(Assay=names(MultiAssay.cohort.2),
                            Assay.type=rep('Long', 16)) ### run Long (limma) for all assays, to be comparible to mlr PreProc
 
+## wrangling + scaling:
 Setup.returned.list<-Setup.plue.MAE.to.vertical.function(MultiAssay.cohort.2, param.Y.name, param.assays.vector, param.subjects.study, param.cohort, param.covariates, param.rv144.mRNA.collapse.multiple.probes, parame.gene.or.module, param.Selected.Meta.sets, Assay.Analyte.sep)
 
 
@@ -481,12 +489,15 @@ task_box # scaled!!!
 # Box$FACS.ZZZ.MFI_CD127_Naive_CD8
 # Box$cpep_model_decayrate
 # Box$Covariate_age_years
+# Box$mRNA.ZZZ.X1555196_at
 
 
 # vign<-task_scaled %>% getTaskData()
 # vign$FACS.ZZZ.MFI_CD127_Naive_CD8
 # vign$cpep_model_decayrate
 # vign$Covariate_age_years
+# vign$mRNA.ZZZ.X1555196_at
+
 
 ```
 
