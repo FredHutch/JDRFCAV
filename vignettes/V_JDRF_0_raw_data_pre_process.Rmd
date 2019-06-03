@@ -18,6 +18,33 @@ knitr::opts_chunk$set(echo = TRUE)
 
 
 
+```{r eval = FALSE}
+## GEO website:
+library(GEOquery)
+gse_web <- getGEO("GSE781",GSEMatrix=FALSE) # active once released
+
+## or, by 5 SuperSeries:
+GSE131523 # Affymetrix Cohort 0
+GSE131524 # Affymetrix Cohort 2
+GSE131525 # RNA-Seq Cohort 0 Cell Sorted
+GSE131526 # RNA-Seq Cohort 0 WB
+GSE131527 # RNA-Seq Cohort 2 Cell Sorted
+
+# gse_tar <- getGEO(filename="/Users/dberel/Desktop/GSE131528_RAW.tar") 
+head(Meta(gse))
+names(GSMList(gse))
+
+names(GPLList(gse))
+gse2553 <- getGEO('GSE2553',GSEMatrix=TRUE)
+show(gse2553)
+
+gsmplatforms <- lapply(GSMList(gse),function(x) {Meta(x)$platform_id})
+head(gsmplatforms)
+```
+
+
+
+
 ```{r}
 
 library(tidyverse)
@@ -170,6 +197,9 @@ for(i in 1:ncol(FACS.join)){
 ##### 2. mRNA
 ## QC: for raw data processing at earlier step, see folder /GEO/mRNA/Affy_cohort2_030817.RMD
 
+
+
+## 2.1 
 mRNA.design<-read.csv(paste(Active.Box.folder, mRNA.design.file.box, sep=''))
 mRNA.design$barcode<-gsub('-', '.' ,mRNA.design$barcode)
 
@@ -179,6 +209,8 @@ mRNA.design$barcode<-gsub('-', '.' ,mRNA.design$barcode)
 ## keep only baseline measures (do same at raw data next)
 ##  no longer need. Elizabeth updated the raw file. mRNA.design<-mRNA.design %>% filter(month==0) %>% filter(barcode!='921893.H06') # exception for ABATE_002008, keep.H05
 
+
+## 2.2
 mRNA.data_filt<-read.csv(paste(Active.Box.folder, mRNA.data_filt.file.box, sep=''))
 # mRNA.data_filt %<>% dplyr::rename(X911285.H02 = X911285H02)
 Probe.id<-mRNA.data_filt$X

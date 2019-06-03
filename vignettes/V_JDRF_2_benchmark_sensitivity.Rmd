@@ -14,6 +14,7 @@ vignette: >
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+library(knitr)
 
 library(dplyr); select<-dplyr::select
 library(magrittr)
@@ -32,8 +33,7 @@ library(biobroom)
 library(limma)
 library(impute)
 
-library(JDRFCAV)
-library(knitr)
+library(JDRFCAV) #install.packages("/../JDRFCAV", repos = NULL, type = "source")
 
 ```
 

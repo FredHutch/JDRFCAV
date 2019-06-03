@@ -32,7 +32,7 @@ library(limma)
 #install_version("ggplot2", version = "0.9.1", repos = "http://cran.us.r-project.org")
 library(impute)
 
-library(JDRFCAV)
+library(JDRFCAV) #install.packages("/../JDRFCAV", repos = NULL, type = "source")
 
 
 ```
