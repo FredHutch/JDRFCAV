@@ -18,33 +18,6 @@ knitr::opts_chunk$set(echo = TRUE)
 
 
 
-```{r eval = FALSE}
-## GEO website:
-library(GEOquery)
-gse_web <- getGEO("GSE781",GSEMatrix=FALSE) # active once released
-
-## or, by 5 SuperSeries:
-GSE131523 # Affymetrix Cohort 0
-GSE131524 # Affymetrix Cohort 2
-GSE131525 # RNA-Seq Cohort 0 Cell Sorted
-GSE131526 # RNA-Seq Cohort 0 WB
-GSE131527 # RNA-Seq Cohort 2 Cell Sorted
-
-# gse_tar <- getGEO(filename="/Users/dberel/Desktop/GSE131528_RAW.tar") 
-head(Meta(gse))
-names(GSMList(gse))
-
-names(GPLList(gse))
-gse2553 <- getGEO('GSE2553',GSEMatrix=TRUE)
-show(gse2553)
-
-gsmplatforms <- lapply(GSMList(gse),function(x) {Meta(x)$platform_id})
-head(gsmplatforms)
-```
-
-
-
-
 ```{r}
 
 library(tidyverse)
@@ -62,7 +35,7 @@ Active.Box.folder<-'BOX/'
 
 
 ##### 0. Cohort 2 pre-processing
-Design.file.box<-c('CAV-Cohort-2_outcomes_parameters_20170727a.csv')
+Design.file.box<-c('CAV-Cohort-2_outcomes_parameters_20170727a-dates removedJMK20190605.csv')
 
 
 #### 1. FACS/MFI
@@ -81,7 +54,7 @@ mRNA.data_filt.file.box<-"filteredAffymetrixData_RemovedDateSent_JMK20190409.csv
 
 
 ###  3. Pro.Insulin
-Pro.Insulin.all.file.box<-c("PIC_baseline.csv")
+Pro.Insulin.all.file.box<-c("PIC_baseline_date removed_JMK20190605.csv")
 
 
 ### 4. microRNA
@@ -234,7 +207,7 @@ mRNA.join<-mRNA.join[,(ncol(mRNA.design)+1):ncol(mRNA.join)]
 Pro.Insulin.all<-read.csv(paste(Active.Box.folder, Pro.Insulin.all.file.box, sep=''))
 Pro.Insulin.all<-Pro.Insulin.all %>% dplyr::rename(participant_id_orig=participant_id, participant_id=cpeptide_visit_id)
 rownames(Pro.Insulin.all)<-Pro.Insulin.all$participant_id
-Pro.Insulin.all<-Pro.Insulin.all[,13:14]
+Pro.Insulin.all<-Pro.Insulin.all %>% select(PI.mean..pmol.L.,  PI.C)
 
 ## Impute missing values with biomarker's average START_001005, START_010005
 for(i in 1:ncol(Pro.Insulin.all)){
